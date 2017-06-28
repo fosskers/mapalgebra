@@ -1,0 +1,36 @@
+name:                mapalgebra
+version:             0.1.0
+synopsis:            Map Algebra types and common operations.
+description:         Map Algebra types and common operations.
+homepage:            https://github.com/fosskers/mapalgebra
+license:             BSD3
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2017 Author name here
+category:            Geography
+
+extra-source-files:
+  - README.md
+
+ghc-options:
+  - -fwarn-unused-imports
+  - -fwarn-unused-binds
+  - -fwarn-name-shadowing
+  - -fwarn-unused-matches
+
+dependencies:
+  - base >= 4.7 && < 5
+  - repa >= 3.4 && < 3.5
+  - repa-algorithms >= 3.4 && < 3.5
+  - vector >= 0.11 && < 0.13
+
+library:
+  source-dirs:       lib
+# Turn these on for optimizations
+#  ghc-options:
+#    -Odph
+#    -fno-liberate-case
+#    -funfolding-use-threshold1000
+#    -funfolding-keeness-factor1000
+#    -fllvm
+#    -optlo-O3
