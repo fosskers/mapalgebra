@@ -1,6 +1,35 @@
 {-# LANGUAGE DeriveAnyClass #-}
 -- {-# LANGUAGE Strict #-}  -- Does this improve performance?
 
+-- |
+-- Module    : Geography.MapAlgebra
+-- Copyright : (c) Colin Woodbury, 2017
+-- License   : BSD3
+-- Maintainer: Colin Woodbury <colingw@gmail.com>
+--
+-- This library is an implementation of /Map Algebra/ as described in the
+-- book /GIS and Cartographic Modeling/ (GaCM) by Dana Tomlin. The fundamental
+-- primitive is the `Raster`, a rectangular grid of data that usually describes
+-- some area on the earth. A `Raster` need not contain numerical data, however,
+-- and need not just represent satellite imagery. It is essentially a matrix,
+-- which of course forms a `Functor`, and thus is available for all the
+-- operations we would expect to run on any Functor. /GIS and Cartographic Modeling/
+-- doesn't lean on this fact, and so describes many seemingly custom
+-- operations which to Haskell are just applications of `fmap` or `zipWith`
+-- with pure functions.
+--
+-- Here the main classes of operations ascribed to /Map Algebra/ and their
+-- corresponding approach in Haskell:
+--
+-- * Single-Raster /Local Operations/ -> `fmap` with pure functions
+-- * Multi-Raster /Local Operations/ -> `foldl` with `zipWith` and pure functions
+-- * /Focal Operations/ -> Called /convolution/ elsewhere; 'repa' has support for this (described below)
+-- * /Zonal Operations/ -> ??? TODO
+--
+-- Whether it is meaningful to perform operations between two given
+-- `Raster`s (i.e. whether the Rasters properly overlap on the earth) is not
+-- handled in this library and is left to the application.
+
 {- TODO
 
 Benchmark against numpy as well as GT's collections API
@@ -17,16 +46,6 @@ module Geography.MapAlgebra
   , Sphere, LatLng, WebMercator
   , Point(..)
   -- * Map Algebra
-  -- | If you want to do simple unary @Raster -> Raster@ operations,
-  -- `Raster` is a `Functor` so you can use `fmap` as normal:
-  --
-  -- @
-  -- myRaster :: Raster p Int
-  --
-  -- -- Absolute value of all values in the Raster.
-  -- fmap abs myRaster
-  -- @
-
   -- ** Local Operations
   -- | Operations between two or more `Raster`s. If the source Rasters aren't the
   -- same size, the size of the result will be their intersection. All operations
@@ -40,8 +59,7 @@ module Geography.MapAlgebra
   --     2 2   3 3      6 6
   -- @
   --
-  -- If an operation you need isn't available here, the trick is to use our
-  -- `zipWith`:
+  -- If an operation you need isn't available here, use our `zipWith`:
   --
   -- @
   -- zipWith :: (a -> b -> c) -> Raster p a -> Raster p b -> Raster p c
@@ -53,18 +71,33 @@ module Geography.MapAlgebra
   -- bar a b = zipWith foo a b
   -- @
 
-  -- *** Foldable Operations
+  -- *** Unary
+  -- | If you want to do simple unary @Raster -> Raster@ operations (called
+  -- /LocalCalculation/ in GaCM), `Raster` is a `Functor` so you can use
+  -- `fmap` as normal:
+  --
+  -- @
+  -- myRaster :: Raster p Int
+  -- abs :: Num a => a -> a
+  --
+  -- -- Absolute value of all values in the Raster.
+  -- fmap abs myRaster
+  -- @
+  , classify
+  -- *** Binary
   -- | You can safely use these with the `foldl` family on any `Foldable` of
   -- `Raster`s. You would likely want @foldl1'@ which is provided by both List
   -- and Vector.
   , add, sub, mul, div
   , min, max
-  -- *** Unfoldable Operations
-  -- | There is no binary form of these functions that exist without
+  -- *** Other
+  -- | There is no binary form of these functions that exists without
   -- producing numerical error,  so you can't use the `foldl` family with these.
-  -- Consider the average operation: @(((a + b) \/ 2) + c) \/ 2@ is not equal to
-  -- @(a + b + c) \/ 3@.
-  , mean
+  -- Consider the average operation, where the following is /not/ true:
+  -- \[
+  --    \forall abc \in \mathbf{R}. \frac{\frac{a + b}{2} + c}{2} = \frac{a + b + c}{3}
+  -- \]
+  , mean, variety, majority, minority
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
 
@@ -73,6 +106,9 @@ module Geography.MapAlgebra
   ) where
 
 import qualified Data.Array.Repa as R
+import           Data.Foldable
+import           Data.List (nub, foldl1')
+import qualified Data.Map.Strict as M
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
 
@@ -89,8 +125,13 @@ data Point p a = Point { x :: a, y :: a } deriving (Eq, Show)
 -- the internet is called `WebMercator`.
 --
 -- A Projection is also known as a Coordinate Reference System (CRS).
+--
+-- Use `reproject` to convert `Point`s between various Projections.
 class Projection p where
+  -- | Convert a `Point` in this Projection to one of radians on a perfect `Sphere`.
   toSphere :: Point p Double -> Point Sphere Double
+
+  -- | Convert a `Point` of radians on a perfect sphere to that of a specific Projection.
   fromSphere :: Point Sphere Double -> Point p Double
 
 -- | Reproject a `Point` from one `Projection` to another.
@@ -139,6 +180,11 @@ instance Foldable (Raster p) where
 constant :: R.DIM2 -> a -> Raster p a
 constant sh n = Raster $ R.fromFunction sh (const n)
 
+-- TODO: Use a BSTree instead (wherever those come from).
+-- | Called /LocalClassification/ in GaCM.
+classify :: Ord a => M.Map a b -> Raster p a -> Raster p b
+classify = undefined
+
 add :: (Projection p, Num a) => Raster p a -> Raster p a -> Raster p a
 add (Raster a) (Raster b) = Raster $ R.zipWith (+) a b
 
@@ -159,20 +205,45 @@ max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
 {- OPS TO ADD
 
-mask
-
--- We probably need additional zipWith3, etc, for these.
-mean, mean3, mean4 ?
 variance
-variety (count of unique values at each location)
 
 -}
 
--- TODO: Use rewrite rules to specialize on strict foldl1 provided by List and Vector!
 -- | Averages the values per-index of all `Raster`s in a collection.
-mean :: (Projection p, Foldable t, Fractional b) => t (Raster p b) -> Raster p b
-mean rs = (/ len) <$> foldl1 add rs
+mean :: (Projection p, Fractional b) => [Raster p b] -> Raster p b
+mean rs = (/ len) <$> foldl1' add rs
   where len = fromIntegral $ length rs
+
+-- | The count of unique values at each shared index.
+variety :: Eq a => [Raster p a] -> Raster p Int
+variety = fmap (length . nub) . listEm
+
+-- | The most frequently appearing value at each shared index.
+majority :: Ord a => [Raster p a] -> Raster p a
+majority = fmap (fst . g . f) . listEm
+  where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
+        g = foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
+
+-- | The least frequently appearing value at each shared index.
+minority :: Ord a => [Raster p a] -> Raster p a
+minority =  fmap (fst . g . f) . listEm
+  where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
+        g = foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+
+-- Interesting... if `Raster` were a Monad (which it /should/ be), this
+-- would just be `sequence`. The issue is that size isn't baked into the types,
+-- only the types of the dimensions. Although any given `Array` does seem to
+-- know what its own extent is.
+--
+-- Should size be baked into the types with DataKinds? If it were, you'd
+-- think we'd be able to pull the size from the types to implement `pure` for
+-- Applicative properly.
+-- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
+-- This would also guarantee that all the local ops would be well defined.
+listEm :: [Raster p a] -> Raster p [a]
+listEm (r:rs) = foldl' (\acc s -> zipWith (:) s acc) z rs
+  where z = (: []) <$> r
+{-# INLINE [2] listEm #-}
 
 -- | Combine two `Raster`s, element-wise, with a binary operator. If the
 -- extent of the two array arguments differ, then the resulting Raster's extent
