@@ -17,6 +17,7 @@ ghc-options:
   - -fwarn-unused-binds
   - -fwarn-name-shadowing
   - -fwarn-unused-matches
+  - -fwarn-incomplete-patterns
 
 dependencies:
   - base >= 4.7 && < 5

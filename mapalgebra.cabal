@@ -22,7 +22,7 @@ extra-source-files:
 library
   hs-source-dirs:
       lib
-  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches
+  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches -fwarn-incomplete-patterns
   build-depends:
       base >= 4.7 && < 5
     , containers

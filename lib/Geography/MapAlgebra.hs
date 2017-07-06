@@ -47,16 +47,16 @@ module Geography.MapAlgebra
   , Point(..)
   -- * Map Algebra
   -- ** Local Operations
-  -- | Operations between two or more `Raster`s. If the source Rasters aren't the
+  -- | Operations between `Raster`s. If the source Rasters aren't the
   -- same size, the size of the result will be their intersection. All operations
   -- are element-wise:
   --
   -- @
-  -- add 1 1   2 2  ==  3 3
-  --     1 1   2 2      3 3
+  -- 1 1 + 2 2  ==  3 3
+  -- 1 1   2 2      3 3
   --
-  -- mul 2 2   3 3  ==  6 6
-  --     2 2   3 3      6 6
+  -- 2 2 * 3 3  ==  6 6
+  -- 2 2   3 3      6 6
   -- @
   --
   -- If an operation you need isn't available here, use our `zipWith`:
@@ -70,7 +70,7 @@ module Geography.MapAlgebra
   -- bar :: Projection p => Raster p Int -> Raster p Int -> Raster p Int
   -- bar a b = zipWith foo a b
   -- @
-
+  , zipWith
   -- *** Unary
   -- | If you want to do simple unary @Raster -> Raster@ operations (called
   -- /LocalCalculation/ in GaCM), `Raster` is a `Functor` so you can use
@@ -87,28 +87,26 @@ module Geography.MapAlgebra
   -- *** Binary
   -- | You can safely use these with the `foldl` family on any `Foldable` of
   -- `Raster`s. You would likely want @foldl1'@ which is provided by both List
-  -- and Vector.
-  , add, sub, mul, div
+  -- and Vector. Keep in mind that `Raster` has a `Num` instance, so you can use
+  -- all the normal math operators with them as well.
   , min, max
   -- *** Other
   -- | There is no binary form of these functions that exists without
   -- producing numerical error,  so you can't use the `foldl` family with these.
   -- Consider the average operation, where the following is /not/ true:
   -- \[
-  --    \forall abc \in \mathbf{R}. \frac{\frac{a + b}{2} + c}{2} = \frac{a + b + c}{3}
+  --    \forall abc \in \mathbb{R}. \frac{\frac{a + b}{2} + c}{2} = \frac{a + b + c}{3}
   -- \]
   , mean, variety, majority, minority
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
-
-  -- * Utilities
-  , zipWith
   ) where
 
 import qualified Data.Array.Repa as R
 import           Data.Foldable
 import           Data.List (nub, foldl1')
 import qualified Data.Map.Strict as M
+import Data.Semigroup
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
 
@@ -166,11 +164,39 @@ instance Functor (Raster p) where
   fmap f (Raster a) = Raster $ R.map f a
   {-# INLINE fmap #-}
 
+-- TODO: Can't make a Monoid instance without some baked-in notion of size!!
+{-
+instance Monoid a => Monoid (Raster p a) where
+  mempty = undefined
+  a `mappend` b = undefined
+-}
+
+instance (Semigroup a, Projection p) => Semigroup (Raster p a) where
+  a <> b = zipWith (<>) a b
+  {-# INLINE (<>) #-}
+
+instance (Num a, Projection p) => Num (Raster p a) where
+  a + b = zipWith (+) a b
+  a - b = zipWith (-) a b
+  a * b = zipWith (*) a b
+  abs a = fmap abs a
+  signum a = fmap signum a
+  fromInteger = undefined -- crap
+
+instance (Fractional a, Projection p) => Fractional (Raster p a) where
+  a / b = zipWith (/) a b
+  fromRational = undefined -- crap
+
 -- TODO: Use rules / checks to use `foldAllP` is the Raster has the right type / size.
 -- TODO: Override `sum` and `product` with the builtins?
--- | Be careful - these operations will evaluate your lazy Raster.
+-- | Be careful - these operations will evaluate your lazy Raster. (Except
+-- `length`, which has a specialized O(1) implementation.
 instance Foldable (Raster p) where
   foldMap f (Raster a) = R.foldAllS mappend mempty $ R.map f a
+  sum (Raster a) = R.sumAllS a
+
+  -- | O(1).
+  length (Raster a) = R.size $ R.extent a
 
 -- TODO: How?
 -- instance Traversable (Raster p) where
@@ -180,67 +206,61 @@ instance Foldable (Raster p) where
 constant :: R.DIM2 -> a -> Raster p a
 constant sh n = Raster $ R.fromFunction sh (const n)
 
--- TODO: Use a BSTree instead (wherever those come from).
--- | Called /LocalClassification/ in GaCM.
-classify :: Ord a => M.Map a b -> Raster p a -> Raster p b
-classify = undefined
+-- | Called /LocalClassification/ in GaCM. The first argument is the value
+-- to give to any index whose value is less than the lowest break in the `M.Map`.
+--
+-- This is a glorified `fmap` operation, but we expose it for convenience.
+classify :: Ord a => b -> M.Map a b -> Raster p a -> Raster p b
+classify def m r = fmap f r
+  where f a = maybe def snd $ M.lookupLE a m
 
-add :: (Projection p, Num a) => Raster p a -> Raster p a -> Raster p a
-add (Raster a) (Raster b) = Raster $ R.zipWith (+) a b
-
-sub :: (Projection p, Num a) => Raster p a -> Raster p a -> Raster p a
-sub (Raster a) (Raster b) = Raster $ R.zipWith (-) a b
-
-mul :: (Projection p, Num a) => Raster p a -> Raster p a -> Raster p a
-mul (Raster a) (Raster b) = Raster $ R.zipWith (*) a b
-
-div :: (Projection p, Fractional a) => Raster p a -> Raster p a -> Raster p a
-div (Raster a) (Raster b) = Raster $ R.zipWith (/) a b
-
+-- | Finds the minimum value at each index between two `Raster`s.
 min :: (Projection p, Ord a) => Raster p a -> Raster p a -> Raster p a
 min (Raster a) (Raster b) = Raster $ R.zipWith P.min a b
 
+-- | Finds the maximum value at each index between two `Raster`s.
 max :: (Projection p, Ord a) => Raster p a -> Raster p a -> Raster p a
 max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
-{- OPS TO ADD
-
-variance
-
--}
-
 -- | Averages the values per-index of all `Raster`s in a collection.
 mean :: (Projection p, Fractional b) => [Raster p b] -> Raster p b
-mean rs = (/ len) <$> foldl1' add rs
+mean rs = (/ len) <$> foldl1' (+) rs
   where len = fromIntegral $ length rs
 
 -- | The count of unique values at each shared index.
-variety :: Eq a => [Raster p a] -> Raster p Int
+variety :: (Projection p, Eq a) => [Raster p a] -> Raster p Int
 variety = fmap (length . nub) . listEm
 
 -- | The most frequently appearing value at each shared index.
-majority :: Ord a => [Raster p a] -> Raster p a
+majority :: (Projection p, Ord a) => [Raster p a] -> Raster p a
 majority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 
 -- | The least frequently appearing value at each shared index.
-minority :: Ord a => [Raster p a] -> Raster p a
-minority =  fmap (fst . g . f) . listEm
+minority :: (Projection p, Ord a) => [Raster p a] -> Raster p a
+minority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+
+-- http://www.wikihow.com/Calculate-Variance
+--variance :: [Raster p a] -> Raster
+-- variance rs = undefined
+--   where m = mean rs
 
 -- Interesting... if `Raster` were a Monad (which it /should/ be), this
 -- would just be `sequence`. The issue is that size isn't baked into the types,
 -- only the types of the dimensions. Although any given `Array` does seem to
 -- know what its own extent is.
+-- (Addendum: should be `sequenceA`, so we actually only need Applicative)
 --
 -- Should size be baked into the types with DataKinds? If it were, you'd
 -- think we'd be able to pull the size from the types to implement `pure` for
 -- Applicative properly.
 -- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
 -- This would also guarantee that all the local ops would be well defined.
-listEm :: [Raster p a] -> Raster p [a]
+listEm :: Projection p => [Raster p a] -> Raster p [a]
+listEm [] = undefined
 listEm (r:rs) = foldl' (\acc s -> zipWith (:) s acc) z rs
   where z = (: []) <$> r
 {-# INLINE [2] listEm #-}
@@ -248,5 +268,6 @@ listEm (r:rs) = foldl' (\acc s -> zipWith (:) s acc) z rs
 -- | Combine two `Raster`s, element-wise, with a binary operator. If the
 -- extent of the two array arguments differ, then the resulting Raster's extent
 -- is their intersection.
-zipWith :: (a -> b -> c) -> Raster p a -> Raster p b -> Raster p c
+zipWith :: Projection p => (a -> b -> c) -> Raster p a -> Raster p b -> Raster p c
 zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
+{-# INLINE zipWith #-}
