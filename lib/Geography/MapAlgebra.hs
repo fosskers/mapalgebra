@@ -104,9 +104,9 @@ module Geography.MapAlgebra
 
 import qualified Data.Array.Repa as R
 import           Data.Foldable
-import           Data.List (nub, foldl1')
+import           Data.List.NonEmpty (NonEmpty(..), cons, fromList, nub)
 import qualified Data.Map.Strict as M
-import Data.Semigroup
+import           Data.Semigroup
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
 
@@ -190,7 +190,7 @@ instance (Fractional a, Projection p) => Fractional (Raster p a) where
 -- TODO: Use rules / checks to use `foldAllP` is the Raster has the right type / size.
 -- TODO: Override `sum` and `product` with the builtins?
 -- | Be careful - these operations will evaluate your lazy Raster. (Except
--- `length`, which has a specialized O(1) implementation.
+-- `length`, which has a specialized O(1) implementation.)
 instance Foldable (Raster p) where
   foldMap f (Raster a) = R.foldAllS mappend mempty $ R.map f a
   sum (Raster a) = R.sumAllS a
@@ -223,25 +223,25 @@ max :: (Projection p, Ord a) => Raster p a -> Raster p a -> Raster p a
 max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
 -- | Averages the values per-index of all `Raster`s in a collection.
-mean :: (Projection p, Fractional b) => [Raster p b] -> Raster p b
-mean rs = (/ len) <$> foldl1' (+) rs
-  where len = fromIntegral $ length rs
+mean :: (Projection p, Fractional b) => NonEmpty (Raster p b) -> Raster p b
+mean (a :| as) = (/ len) <$> foldl' (+) a as
+  where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
-variety :: (Projection p, Eq a) => [Raster p a] -> Raster p Int
+variety :: (Projection p, Eq a) => NonEmpty (Raster p a) -> Raster p Int
 variety = fmap (length . nub) . listEm
 
 -- | The most frequently appearing value at each shared index.
-majority :: (Projection p, Ord a) => [Raster p a] -> Raster p a
+majority :: (Projection p, Ord a) => NonEmpty (Raster p a) -> Raster p a
 majority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
+        g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 
 -- | The least frequently appearing value at each shared index.
-minority :: (Projection p, Ord a) => [Raster p a] -> Raster p a
+minority :: (Projection p, Ord a) => NonEmpty (Raster p a) -> Raster p a
 minority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+        g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 
 -- http://www.wikihow.com/Calculate-Variance
 --variance :: [Raster p a] -> Raster
@@ -259,10 +259,9 @@ minority = fmap (fst . g . f) . listEm
 -- Applicative properly.
 -- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
 -- This would also guarantee that all the local ops would be well defined.
-listEm :: Projection p => [Raster p a] -> Raster p [a]
-listEm [] = undefined
-listEm (r:rs) = foldl' (\acc s -> zipWith (:) s acc) z rs
-  where z = (: []) <$> r
+listEm :: Projection p => NonEmpty (Raster p a) -> Raster p (NonEmpty a)
+listEm (r :| rs) = foldl' (\acc s -> zipWith cons s acc) z rs
+  where z = (\a -> fromList [a]) <$> r
 {-# INLINE [2] listEm #-}
 
 -- | Combine two `Raster`s, element-wise, with a binary operator. If the
