@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DataKinds, KindSignatures, ScopedTypeVariables #-}
 -- {-# LANGUAGE Strict #-}  -- Does this improve performance?
 
 -- |
@@ -33,6 +34,7 @@
 {- TODO
 
 Benchmark against numpy as well as GT's collections API
+Checkout `repa-io`
 
 -}
 
@@ -104,9 +106,11 @@ module Geography.MapAlgebra
 
 import qualified Data.Array.Repa as R
 import           Data.Foldable
-import           Data.List.NonEmpty (NonEmpty(..), cons, fromList, nub)
+import           Data.List.NonEmpty (NonEmpty(..), cons, nub)
 import qualified Data.Map.Strict as M
+import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
+import           GHC.TypeLits
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
 
@@ -158,87 +162,109 @@ instance Projection WebMercator where
   toSphere = undefined
   fromSphere = undefined
 
-newtype Raster p a = Raster { _array :: R.Array R.D R.DIM2 a }
+-- | A rectangular grid of data representing some area on the earth.
+--
+-- * @p@: What `Projection` is this Raster in?
+-- * @c@: How many columns does this Raster have?
+-- * @r@: How many rows does this Raster have?
+-- * @a@: What data type is held in this Raster?
+--
+-- By having explicit p, c, and r, we make impossible any operation between
+-- two Rasters of differing size or projection. Example:
+--
+-- @
+-- -- | A lazy 256x256 Raster with the value 5 at every index. Uses DataKinds
+-- -- and "type literals" to achieve the same-size guarantee.
+-- myRaster :: Raster WebMercator 256 256 Int
+-- myRaster = constant 5
+--
+-- >>> length myRaster
+-- 65536
+-- @
+newtype Raster p (c :: Nat) (r :: Nat) a = Raster { _array :: R.Array R.D R.DIM2 a }
 
-instance Functor (Raster p) where
+instance Functor (Raster c r p) where
   fmap f (Raster a) = Raster $ R.map f a
   {-# INLINE fmap #-}
 
--- TODO: Can't make a Monoid instance without some baked-in notion of size!!
-{-
-instance Monoid a => Monoid (Raster p a) where
-  mempty = undefined
-  a `mappend` b = undefined
--}
+instance (Monoid a, Projection p, KnownNat c, KnownNat r) => Monoid (Raster p c r a) where
+  mempty = constant mempty
+  {-# INLINE mempty #-}
 
-instance (Semigroup a, Projection p) => Semigroup (Raster p a) where
-  a <> b = zipWith (<>) a b
-  {-# INLINE (<>) #-}
+  a `mappend` b = zipWith mappend a b
+  {-# INLINE mappend #-}
 
-instance (Num a, Projection p) => Num (Raster p a) where
+instance (Num a, Projection p, KnownNat c, KnownNat r) => Num (Raster p c r a) where
   a + b = zipWith (+) a b
   a - b = zipWith (-) a b
   a * b = zipWith (*) a b
   abs a = fmap abs a
   signum a = fmap signum a
-  fromInteger = undefined -- crap
+  fromInteger = constant . fromInteger
 
-instance (Fractional a, Projection p) => Fractional (Raster p a) where
+instance (Fractional a, Projection p, KnownNat c, KnownNat r) => Fractional (Raster p c r a) where
   a / b = zipWith (/) a b
-  fromRational = undefined -- crap
+  fromRational = constant . fromRational
 
 -- TODO: Use rules / checks to use `foldAllP` is the Raster has the right type / size.
 -- TODO: Override `sum` and `product` with the builtins?
 -- | Be careful - these operations will evaluate your lazy Raster. (Except
 -- `length`, which has a specialized O(1) implementation.)
-instance Foldable (Raster p) where
+instance Foldable (Raster p c r) where
   foldMap f (Raster a) = R.foldAllS mappend mempty $ R.map f a
   sum (Raster a) = R.sumAllS a
-
   -- | O(1).
   length (Raster a) = R.size $ R.extent a
+
+instance (Projection p, KnownNat c, KnownNat r) => Applicative (Raster p c r) where
+  pure = constant
+  {-# INLINE pure #-}
+
+  fs <*> as = zipWith ($) fs as
+  {-# INLINE (<*>) #-}
 
 -- TODO: How?
 -- instance Traversable (Raster p) where
 --   traverse f (Raster a) = undefined
 
 -- | O(1). Create a `Raster` of some size which has the same value everywhere.
-constant :: R.DIM2 -> a -> Raster p a
-constant sh n = Raster $ R.fromFunction sh (const n)
+constant :: forall c r a p. (KnownNat c, KnownNat r) => a -> Raster p c r a
+constant a = Raster $ R.fromFunction sh (const a)
+  where sh = R.ix2 (fromInteger $ natVal (Proxy :: Proxy c)) (fromInteger $ natVal (Proxy :: Proxy r))
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
 --
 -- This is a glorified `fmap` operation, but we expose it for convenience.
-classify :: Ord a => b -> M.Map a b -> Raster p a -> Raster p b
+classify :: Ord a => b -> M.Map a b -> Raster p c r a -> Raster p c r b
 classify def m r = fmap f r
   where f a = maybe def snd $ M.lookupLE a m
 
 -- | Finds the minimum value at each index between two `Raster`s.
-min :: (Projection p, Ord a) => Raster p a -> Raster p a -> Raster p a
+min :: (Projection p, Ord a) => Raster p c r a -> Raster p c r a -> Raster p c r a
 min (Raster a) (Raster b) = Raster $ R.zipWith P.min a b
 
 -- | Finds the maximum value at each index between two `Raster`s.
-max :: (Projection p, Ord a) => Raster p a -> Raster p a -> Raster p a
+max :: (Projection p, Ord a) => Raster p c r a -> Raster p c r a -> Raster p c r a
 max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
 -- | Averages the values per-index of all `Raster`s in a collection.
-mean :: (Projection p, Fractional b) => NonEmpty (Raster p b) -> Raster p b
+mean :: (Projection p, Fractional a, KnownNat c, KnownNat r) => NonEmpty (Raster p c r a) -> Raster p c r a
 mean (a :| as) = (/ len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
-variety :: (Projection p, Eq a) => NonEmpty (Raster p a) -> Raster p Int
+variety :: (Projection p, Eq a) => NonEmpty (Raster p c r a) -> Raster p c r Int
 variety = fmap (length . nub) . listEm
 
 -- | The most frequently appearing value at each shared index.
-majority :: (Projection p, Ord a) => NonEmpty (Raster p a) -> Raster p a
+majority :: (Projection p, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
 majority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 
 -- | The least frequently appearing value at each shared index.
-minority :: (Projection p, Ord a) => NonEmpty (Raster p a) -> Raster p a
+minority :: (Projection p, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
 minority = fmap (fst . g . f) . listEm
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
@@ -259,14 +285,12 @@ minority = fmap (fst . g . f) . listEm
 -- Applicative properly.
 -- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
 -- This would also guarantee that all the local ops would be well defined.
-listEm :: Projection p => NonEmpty (Raster p a) -> Raster p (NonEmpty a)
+listEm :: Projection p => NonEmpty (Raster p c r a) -> Raster p c r (NonEmpty a)
 listEm (r :| rs) = foldl' (\acc s -> zipWith cons s acc) z rs
-  where z = (\a -> fromList [a]) <$> r
+  where z = (\a -> a :| []) <$> r
 {-# INLINE [2] listEm #-}
 
--- | Combine two `Raster`s, element-wise, with a binary operator. If the
--- extent of the two array arguments differ, then the resulting Raster's extent
--- is their intersection.
-zipWith :: Projection p => (a -> b -> c) -> Raster p a -> Raster p b -> Raster p c
+-- | Combine two `Raster`s, element-wise, with a binary operator.
+zipWith :: Projection p => (a -> b -> d) -> Raster p c r a -> Raster p c r b -> Raster p c r d
 zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
 {-# INLINE zipWith #-}
