@@ -19,7 +19,7 @@
 -- operations which to Haskell are just applications of `fmap` or `zipWith`
 -- with pure functions.
 --
--- Here the main classes of operations ascribed to /Map Algebra/ and their
+-- Here are the main classes of operations ascribed to /Map Algebra/ and their
 -- corresponding approach in Haskell:
 --
 -- * Single-Raster /Local Operations/ -> `fmap` with pure functions
@@ -64,7 +64,7 @@ module Geography.MapAlgebra
   -- If an operation you need isn't available here, use our `zipWith`:
   --
   -- @
-  -- zipWith :: (a -> b -> c) -> Raster p a -> Raster p b -> Raster p c
+  -- zipWith :: (a -> b -> d) -> Raster p c r a -> Raster p c r b -> Raster p c r d
   --
   -- -- Your operation, which you should INLINE and use bang patterns with.
   -- foo :: Int -> Int -> Int
@@ -79,7 +79,7 @@ module Geography.MapAlgebra
   -- `fmap` as normal:
   --
   -- @
-  -- myRaster :: Raster p Int
+  -- myRaster :: Raster p c r Int
   -- abs :: Num a => a -> a
   --
   -- -- Absolute value of all values in the Raster.
@@ -106,7 +106,7 @@ module Geography.MapAlgebra
 
 import qualified Data.Array.Repa as R
 import           Data.Foldable
-import           Data.List.NonEmpty (NonEmpty(..), cons, nub)
+import           Data.List.NonEmpty (NonEmpty(..), nub)
 import qualified Data.Map.Strict as M
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
@@ -170,7 +170,9 @@ instance Projection WebMercator where
 -- * @a@: What data type is held in this Raster?
 --
 -- By having explicit p, c, and r, we make impossible any operation between
--- two Rasters of differing size or projection. Example:
+-- two Rasters of differing size or projection. Conceptually, we consider
+-- Rasters of different size and projection to be /entirely different types/.
+-- Example:
 --
 -- @
 -- -- | A lazy 256x256 Raster with the value 5 at every index. Uses DataKinds
@@ -187,6 +189,14 @@ instance Functor (Raster c r p) where
   fmap f (Raster a) = Raster $ R.map f a
   {-# INLINE fmap #-}
 
+instance (Projection p, KnownNat c, KnownNat r) => Applicative (Raster p c r) where
+  pure = constant
+  {-# INLINE pure #-}
+
+  -- TODO: Use strict ($)?
+  fs <*> as = zipWith ($) fs as
+  {-# INLINE (<*>) #-}
+
 instance (Monoid a, Projection p, KnownNat c, KnownNat r) => Monoid (Raster p c r a) where
   mempty = constant mempty
   {-# INLINE mempty #-}
@@ -198,8 +208,8 @@ instance (Num a, Projection p, KnownNat c, KnownNat r) => Num (Raster p c r a) w
   a + b = zipWith (+) a b
   a - b = zipWith (-) a b
   a * b = zipWith (*) a b
-  abs a = fmap abs a
-  signum a = fmap signum a
+  abs = fmap abs
+  signum = fmap signum
   fromInteger = constant . fromInteger
 
 instance (Fractional a, Projection p, KnownNat c, KnownNat r) => Fractional (Raster p c r a) where
@@ -216,17 +226,6 @@ instance Foldable (Raster p c r) where
   -- | O(1).
   length (Raster a) = R.size $ R.extent a
 
-instance (Projection p, KnownNat c, KnownNat r) => Applicative (Raster p c r) where
-  pure = constant
-  {-# INLINE pure #-}
-
-  fs <*> as = zipWith ($) fs as
-  {-# INLINE (<*>) #-}
-
--- TODO: How?
--- instance Traversable (Raster p) where
---   traverse f (Raster a) = undefined
-
 -- | O(1). Create a `Raster` of some size which has the same value everywhere.
 constant :: forall c r a p. (KnownNat c, KnownNat r) => a -> Raster p c r a
 constant a = Raster $ R.fromFunction sh (const a)
@@ -241,11 +240,11 @@ classify def m r = fmap f r
   where f a = maybe def snd $ M.lookupLE a m
 
 -- | Finds the minimum value at each index between two `Raster`s.
-min :: (Projection p, Ord a) => Raster p c r a -> Raster p c r a -> Raster p c r a
+min :: Ord a => Raster p c r a -> Raster p c r a -> Raster p c r a
 min (Raster a) (Raster b) = Raster $ R.zipWith P.min a b
 
 -- | Finds the maximum value at each index between two `Raster`s.
-max :: (Projection p, Ord a) => Raster p c r a -> Raster p c r a -> Raster p c r a
+max :: Ord a => Raster p c r a -> Raster p c r a -> Raster p c r a
 max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
 -- | Averages the values per-index of all `Raster`s in a collection.
@@ -254,18 +253,18 @@ mean (a :| as) = (/ len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
-variety :: (Projection p, Eq a) => NonEmpty (Raster p c r a) -> Raster p c r Int
-variety = fmap (length . nub) . listEm
+variety :: (Projection p, KnownNat c, KnownNat r, Eq a) => NonEmpty (Raster p c r a) -> Raster p c r Int
+variety = fmap (length . nub) . sequenceA
 
 -- | The most frequently appearing value at each shared index.
-majority :: (Projection p, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
-majority = fmap (fst . g . f) . listEm
+majority :: (Projection p, KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
+majority = fmap (fst . g . f) . sequenceA
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 
 -- | The least frequently appearing value at each shared index.
-minority :: (Projection p, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
-minority = fmap (fst . g . f) . listEm
+minority :: (Projection p, KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
+minority = fmap (fst . g . f) . sequenceA
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 
@@ -285,10 +284,11 @@ minority = fmap (fst . g . f) . listEm
 -- Applicative properly.
 -- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
 -- This would also guarantee that all the local ops would be well defined.
-listEm :: Projection p => NonEmpty (Raster p c r a) -> Raster p c r (NonEmpty a)
-listEm (r :| rs) = foldl' (\acc s -> zipWith cons s acc) z rs
-  where z = (\a -> a :| []) <$> r
-{-# INLINE [2] listEm #-}
+--listEm :: (Projection p, KnownNat c, KnownNat r) => NonEmpty (Raster p c r a) -> Raster p c r (NonEmpty a)
+--listEm = sequenceA
+--listEm (r :| rs) = foldl' (\acc s -> zipWith cons s acc) z rs
+--  where z = (\a -> a :| []) <$> r
+--{-# INLINE [2] listEm #-}
 
 -- | Combine two `Raster`s, element-wise, with a binary operator.
 zipWith :: Projection p => (a -> b -> d) -> Raster p c r a -> Raster p c r b -> Raster p c r d
