@@ -99,7 +99,7 @@ module Geography.MapAlgebra
   -- \[
   --    \forall abc \in \mathbb{R}. \frac{\frac{a + b}{2} + c}{2} = \frac{a + b + c}{3}
   -- \]
-  , mean, variety, majority, minority
+  , mean, variety, majority, minority, variance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
   ) where
@@ -268,22 +268,20 @@ minority = fmap (fst . g . f) . sequenceA
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 
--- http://www.wikihow.com/Calculate-Variance
---variance :: [Raster p a] -> Raster
--- variance rs = undefined
---   where m = mean rs
+-- | A measure of how spread out a dataset is. This calculation will fail
+-- with `Nothing` if a length 1 list is given.
+variance :: (Projection p, KnownNat c, KnownNat r, Fractional a) =>
+  NonEmpty (Raster p c r a) -> Maybe (Raster p c r a)
+variance (_ :| []) = Nothing
+variance rs = Just (f <$> sequenceA rs)
+  where len = fromIntegral $ length rs
+        avg ns = (/ len) $ sum ns
+        f os@(n :| ns) = foldl' (\acc m -> acc + ((m - av) ^ 2)) ((n - av) ^ 2) ns / (len - 1)
+          where av = avg os
 
--- Interesting... if `Raster` were a Monad (which it /should/ be), this
--- would just be `sequence`. The issue is that size isn't baked into the types,
--- only the types of the dimensions. Although any given `Array` does seem to
--- know what its own extent is.
--- (Addendum: should be `sequenceA`, so we actually only need Applicative)
---
--- Should size be baked into the types with DataKinds? If it were, you'd
--- think we'd be able to pull the size from the types to implement `pure` for
--- Applicative properly.
--- @newtype Raster c r p a = Raster { _array :: Raster DIM2 D a }@ ?
--- This would also guarantee that all the local ops would be well defined.
+
+-- Old implementation that was replaced with `sequenceA` usage above. I wonder if this is faster?
+-- Leaving it here in case we feel like comparing later.
 --listEm :: (Projection p, KnownNat c, KnownNat r) => NonEmpty (Raster p c r a) -> Raster p c r (NonEmpty a)
 --listEm = sequenceA
 --listEm (r :| rs) = foldl' (\acc s -> zipWith cons s acc) z rs
