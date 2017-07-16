@@ -200,6 +200,11 @@ instance (KnownNat c, KnownNat r) => Applicative (Raster p c r) where
   fs <*> as = zipWith ($) fs as
   {-# INLINE (<*>) #-}
 
+-- | Be careful - this will evaluate your lazy Raster.
+instance Eq a => Eq (Raster p c r a) where
+  -- TODO: Check size and perform parallel version if big enough.
+  (Raster a) == (Raster b) = R.equalsS a b
+
 instance (Monoid a, KnownNat c, KnownNat r) => Monoid (Raster p c r a) where
   mempty = constant mempty
   {-# INLINE mempty #-}
