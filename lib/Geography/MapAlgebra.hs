@@ -102,9 +102,12 @@ module Geography.MapAlgebra
   , mean, variety, majority, minority, variance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
+  , fadd, fsub, fmean
   ) where
 
 import qualified Data.Array.Repa as R
+import qualified Data.Array.Repa.Stencil as R
+import qualified Data.Array.Repa.Stencil.Dim2 as R
 import           Data.Foldable
 import           Data.List.NonEmpty (NonEmpty(..), nub)
 import qualified Data.Map.Strict as M
@@ -185,11 +188,11 @@ instance Projection WebMercator where
 -- @
 newtype Raster p (c :: Nat) (r :: Nat) a = Raster { _array :: R.Array R.D R.DIM2 a }
 
-instance Functor (Raster c r p) where
+instance Functor (Raster p c r) where
   fmap f (Raster a) = Raster $ R.map f a
   {-# INLINE fmap #-}
 
-instance (Projection p, KnownNat c, KnownNat r) => Applicative (Raster p c r) where
+instance (KnownNat c, KnownNat r) => Applicative (Raster p c r) where
   pure = constant
   {-# INLINE pure #-}
 
@@ -197,14 +200,14 @@ instance (Projection p, KnownNat c, KnownNat r) => Applicative (Raster p c r) wh
   fs <*> as = zipWith ($) fs as
   {-# INLINE (<*>) #-}
 
-instance (Monoid a, Projection p, KnownNat c, KnownNat r) => Monoid (Raster p c r a) where
+instance (Monoid a, KnownNat c, KnownNat r) => Monoid (Raster p c r a) where
   mempty = constant mempty
   {-# INLINE mempty #-}
 
   a `mappend` b = zipWith mappend a b
   {-# INLINE mappend #-}
 
-instance (Num a, Projection p, KnownNat c, KnownNat r) => Num (Raster p c r a) where
+instance (Num a, KnownNat c, KnownNat r) => Num (Raster p c r a) where
   a + b = zipWith (+) a b
   a - b = zipWith (-) a b
   a * b = zipWith (*) a b
@@ -212,7 +215,7 @@ instance (Num a, Projection p, KnownNat c, KnownNat r) => Num (Raster p c r a) w
   signum = fmap signum
   fromInteger = constant . fromInteger
 
-instance (Fractional a, Projection p, KnownNat c, KnownNat r) => Fractional (Raster p c r a) where
+instance (Fractional a, KnownNat c, KnownNat r) => Fractional (Raster p c r a) where
   a / b = zipWith (/) a b
   fromRational = constant . fromRational
 
@@ -248,30 +251,29 @@ max :: Ord a => Raster p c r a -> Raster p c r a -> Raster p c r a
 max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
 
 -- | Averages the values per-index of all `Raster`s in a collection.
-mean :: (Projection p, Fractional a, KnownNat c, KnownNat r) => NonEmpty (Raster p c r a) -> Raster p c r a
+mean :: (Fractional a, KnownNat c, KnownNat r) => NonEmpty (Raster p c r a) -> Raster p c r a
 mean (a :| as) = (/ len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
-variety :: (Projection p, KnownNat c, KnownNat r, Eq a) => NonEmpty (Raster p c r a) -> Raster p c r Int
+variety :: (KnownNat c, KnownNat r, Eq a) => NonEmpty (Raster p c r a) -> Raster p c r Int
 variety = fmap (length . nub) . sequenceA
 
 -- | The most frequently appearing value at each shared index.
-majority :: (Projection p, KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
+majority :: (KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
 majority = fmap (fst . g . f) . sequenceA
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 
 -- | The least frequently appearing value at each shared index.
-minority :: (Projection p, KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
+minority :: (KnownNat c, KnownNat r, Ord a) => NonEmpty (Raster p c r a) -> Raster p c r a
 minority = fmap (fst . g . f) . sequenceA
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 
 -- | A measure of how spread out a dataset is. This calculation will fail
 -- with `Nothing` if a length 1 list is given.
-variance :: (Projection p, KnownNat c, KnownNat r, Fractional a) =>
-  NonEmpty (Raster p c r a) -> Maybe (Raster p c r a)
+variance :: (KnownNat c, KnownNat r, Fractional a) => NonEmpty (Raster p c r a) -> Maybe (Raster p c r a)
 variance (_ :| []) = Nothing
 variance rs = Just (f <$> sequenceA rs)
   where len = fromIntegral $ length rs
@@ -289,6 +291,23 @@ variance rs = Just (f <$> sequenceA rs)
 --{-# INLINE [2] listEm #-}
 
 -- | Combine two `Raster`s, element-wise, with a binary operator.
-zipWith :: Projection p => (a -> b -> d) -> Raster p c r a -> Raster p c r b -> Raster p c r d
+zipWith :: (a -> b -> d) -> Raster p c r a -> Raster p c r b -> Raster p c r d
 zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
 {-# INLINE zipWith #-}
+
+-- | Focal Addition.
+fadd :: Num a => Raster p c r a -> Raster p c r a
+fadd (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
+  where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just 1))
+
+-- | Focal Subtraction.
+fsub :: Num a => Raster p c r a -> Raster p c r a
+fsub (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
+  where neighbourhood = R.makeStencil (R.ix2 3 3) f
+        f (R.Z R.:. 0 R.:. 0) = Just 1
+        f _ = Just (-1)
+
+-- | Focal Mean.
+fmean :: Fractional a => Raster p r c a -> Raster p c r a
+fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
+  where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just (1/9)))
