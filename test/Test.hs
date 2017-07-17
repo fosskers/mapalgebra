@@ -2,8 +2,8 @@
 
 module Main where
 
--- import qualified Data.Array.Repa as R
--- import           Data.Functor.Identity
+import qualified Data.Array.Repa as R
+import qualified Data.Vector.Unboxed as U
 import           Geography.MapAlgebra
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -29,6 +29,9 @@ suite = testGroup "Unit Tests"
     -- takes ~68 seconds
 --    , testCase "(+) big" $ runIdentity (R.sumAllP . _array $ big + big) @?= 21474836480 * 2
     ]
+  , testGroup "Repa Behaviour"
+    [ testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
+    ]
   ]
 
 small :: Raster WebMercator 256 256 Int
@@ -36,3 +39,7 @@ small = constant 5
 
 big :: Raster WebMercator 65536 65536 Int
 big = constant 5
+
+-- | Should have two rows and 3 columns.
+arr :: R.Array R.U R.DIM2 Int
+arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
