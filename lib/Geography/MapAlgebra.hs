@@ -103,7 +103,7 @@ module Geography.MapAlgebra
   , mean, variety, majority, minority, variance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
-  , fsum, fmean, fmax, fmin
+  , fsum, fmean, fmax, fmin, fvariety
   ) where
 
 import           Data.Array.Repa ((:.)(..), Z(..))
@@ -114,7 +114,7 @@ import           Data.Bits
 import           Data.Bits.Floating
 import           Data.Foldable
 import           Data.Int
-import           Data.List (unfoldr)
+import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..), nub)
 import qualified Data.Map.Strict as M
 import           Data.Proxy (Proxy(..))
@@ -337,11 +337,20 @@ fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourho
 -- TODO Not sure about the `Boundary` value to use here.
 -- | Focal Maximum
 fmax :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fmax (Raster a) = Raster . R.delay . R.map (maximum . unpack) . R.mapStencil2 (R.BoundClamp) focalStencil $ R.map common a
+fmax (Raster a) = Raster . R.map maximum $ focal R.BoundClamp a
 
 -- | Focal Minimum.
 fmin :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fmin (Raster a) = Raster . R.delay . R.map (minimum . unpack) . R.mapStencil2 (R.BoundClamp) focalStencil $ R.map common a
+fmin (Raster a) = Raster . R.map minimum $ focal R.BoundClamp a
+
+-- | Focal Variety.
+fvariety :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Int
+fvariety (Raster a) = Raster . R.map (length . L.nub) $ focal R.BoundClamp a
+
+-- | Yield all the values in a neighbourhood for further scrutiny.
+focal :: Focal a => R.Boundary Integer -> R.Array R.D R.DIM2 a -> R.Array R.D R.DIM2 [a]
+focal b a = R.map unpack . R.mapStencil2 b focalStencil $ R.map common a
+{-# INLINE focal #-}
 
 -- | A stencil used to bit-pack each value of a focal neighbourhood into
 -- a single `Integer`. Once packed, you can `fmap` over the resulting `Raster`
@@ -403,7 +412,7 @@ instance Focal Int64 where
 
 -- | Unpack the 9 original values that were packed into an `Integer` during a Focal op.
 unpack :: Focal a => Integer -> [a]
-unpack = take 9 . unfoldr (\n -> Just (back n, shiftL n 64))
+unpack = take 9 . L.unfoldr (\n -> Just (back n, shiftL n 64))
 
 {-
 THE STRATEGY (for real this time)

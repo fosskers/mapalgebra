@@ -21,7 +21,11 @@ suite :: TestTree
 suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)" $ length small @?= 65536
-    , testCase "constant (2^16 x 2^16)" $ length (constant 5 :: Raster p 65536 65536 Int) @?= 4294967296
+    , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
+    ]
+  , testGroup "Typeclass Ops"
+    [ testCase "(==)" $ assert (small == small)
+    , testCase "(+)" $ assert (one + one == two)
     ]
   , testGroup "Folds"
     [ testCase "sum (small)" $ sum small @?= 327680
@@ -36,16 +40,22 @@ suite = testGroup "Unit Tests"
   , testGroup "Focal Typeclass"
     [ testProperty "Word32" (\(v :: Word32) -> back (common v) == v)
     , testProperty "Word64" (\(v :: Word64) -> back (common v) == v)
-    , testProperty "Float" (\(v :: Float) -> back (common v) == v)
+    , testProperty "Float"  (\(v :: Float) -> back (common v) == v)
     , testProperty "Double" (\(v :: Double) -> back (common v) == v)
-    , testProperty "Int" (\(v :: Int) -> back (common v) == v)
-    , testProperty "Int32" (\(v :: Int32) -> back (common v) == v)
-    , testProperty "Int64" (\(v :: Int64) -> back (common v) == v)
+    , testProperty "Int"    (\(v :: Int) -> back (common v) == v)
+    , testProperty "Int32"  (\(v :: Int32) -> back (common v) == v)
+    , testProperty "Int64"  (\(v :: Int64) -> back (common v) == v)
     ]
   , testGroup "Repa Behaviour"
     [ testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
     ]
   ]
+
+one :: Raster p 10 10 Int
+one = constant 1
+
+two :: Raster p 10 10 Int
+two = constant 2
 
 small :: Raster WebMercator 256 256 Int
 small = constant 5
@@ -56,3 +66,10 @@ big = constant 5
 -- | Should have two rows and 3 columns.
 arr :: R.Array R.U R.DIM2 Int
 arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
+
+focal :: Maybe (Raster p 5 5 Int)
+focal = fromUnboxed $ U.fromList [1, 1, 1, 1, 1
+                                 ,1, 2, 2, 2, 1
+                                 ,1, 2, 3, 2, 1
+                                 ,1, 2, 2, 2, 1
+                                 ,1, 1, 1, 1, 1]
