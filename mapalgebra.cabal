@@ -28,6 +28,7 @@ library
     , containers
     , repa >= 3.4 && < 3.5
     , repa-algorithms >= 3.4 && < 3.5
+    , floating-bits >= 0.3 && < 0.4
     , vector >= 0.11 && < 0.13
   exposed-modules:
       Geography.MapAlgebra
@@ -44,8 +45,10 @@ test-suite mapalgebra-test
     , containers
     , repa >= 3.4 && < 3.5
     , repa-algorithms >= 3.4 && < 3.5
+    , floating-bits >= 0.3 && < 0.4
     , vector >= 0.11 && < 0.13
+    , mapalgebra
     , tasty >= 0.11 && < 0.12
     , tasty-hunit >= 0.9 && < 0.10
-    , mapalgebra
+    , tasty-quickcheck >= 0.8 && < 0.9
   default-language: Haskell2010

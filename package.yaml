@@ -24,6 +24,7 @@ dependencies:
   - containers
   - repa >= 3.4 && < 3.5
   - repa-algorithms >= 3.4 && < 3.5
+  - floating-bits >= 0.3 && < 0.4
   - vector >= 0.11 && < 0.13
 
 library:
@@ -44,6 +45,7 @@ tests:
     ghc-options:
       - -threaded
     dependencies:
+      - mapalgebra
       - tasty >= 0.11 && < 0.12
       - tasty-hunit >= 0.9 && < 0.10
-      - mapalgebra
+      - tasty-quickcheck >= 0.8 && < 0.9

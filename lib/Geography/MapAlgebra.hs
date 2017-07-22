@@ -47,6 +47,7 @@ module Geography.MapAlgebra
   , reproject
   , Sphere, LatLng, WebMercator
   , Point(..)
+  , Focal(..)
   -- * Map Algebra
   -- ** Local Operations
   -- | Operations between `Raster`s. If the source Rasters aren't the
@@ -102,18 +103,24 @@ module Geography.MapAlgebra
   , mean, variety, majority, minority, variance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
-  , fadd, fsub, fmean
+  , fsum, fmean, fmax, fmin
   ) where
 
+import           Data.Array.Repa ((:.)(..), Z(..))
 import qualified Data.Array.Repa as R
 import qualified Data.Array.Repa.Stencil as R
 import qualified Data.Array.Repa.Stencil.Dim2 as R
+import           Data.Bits
+import           Data.Bits.Floating
 import           Data.Foldable
+import           Data.Int
+import           Data.List (unfoldr)
 import           Data.List.NonEmpty (NonEmpty(..), nub)
 import qualified Data.Map.Strict as M
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
 import qualified Data.Vector.Unboxed as U
+import           Data.Word
 import           GHC.TypeLits
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
@@ -318,18 +325,95 @@ zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
 {-# INLINE zipWith #-}
 
 -- | Focal Addition.
-fadd :: Num a => Raster p r c a -> Raster p r c a
-fadd (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
+fsum :: Num a => Raster p r c a -> Raster p r c a
+fsum (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
   where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just 1))
-
--- | Focal Subtraction.
-fsub :: Num a => Raster p r c a -> Raster p r c a
-fsub (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
-  where neighbourhood = R.makeStencil (R.ix2 3 3) f
-        f (R.Z R.:. 0 R.:. 0) = Just 1
-        f _ = Just (-1)
 
 -- | Focal Mean.
 fmean :: Fractional a => Raster p r c a -> Raster p r c a
 fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
   where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just (1/9)))
+
+-- TODO Not sure about the `Boundary` value to use here.
+-- | Focal Maximum
+fmax :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
+fmax (Raster a) = Raster . R.delay . R.map (maximum . unpack) . R.mapStencil2 (R.BoundClamp) focalStencil $ R.map common a
+
+-- | Focal Minimum.
+fmin :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
+fmin (Raster a) = Raster . R.delay . R.map (minimum . unpack) . R.mapStencil2 (R.BoundClamp) focalStencil $ R.map common a
+
+-- | A stencil used to bit-pack each value of a focal neighbourhood into
+-- a single `Integer`. Once packed, you can `fmap` over the resulting `Raster`
+-- to unpack the `Integer` and scrutinize the values freely (i.e. determine
+-- the maximum value, etc).
+focalStencil :: R.Stencil R.DIM2 Integer
+focalStencil = R.makeStencil (R.ix2 3 3) f
+  where f :: R.DIM2 -> Maybe Integer
+        f (Z :. -1 :. -1) = Just 1
+        f (Z :. -1 :.  0) = Just (2^64)
+        f (Z :. -1 :.  1) = Just (2^128)
+        f (Z :. 0  :. -1) = Just (2^196)
+        f (Z :. 0  :.  0) = Just (2^256)
+        f (Z :. 0  :.  1) = Just (2^320)
+        f (Z :. 1  :. -1) = Just (2^384)
+        f (Z :. 1  :.  0) = Just (2^448)
+        f (Z :. 1  :.  1) = Just (2^512)
+        f _               = Nothing
+
+-- | Any type which is meaningful to perform focal operations on.
+-- Law:
+-- @
+-- back (common v) == v
+-- @
+class Focal a where
+  -- | Convert a value into an `Integer` in a way that preserves its bit layout.
+  common :: a -> Integer
+  -- | Shave the first 64 bits off an `Integer` and recreate the original value.
+  back :: Integer -> a
+
+instance Focal Word32 where
+  common = toInteger
+  back = fromIntegral
+
+instance Focal Word64 where
+  common = toInteger
+  back = fromIntegral  -- Keeps precisely the first 64 bits of the Integer.
+
+instance Focal Float where
+  common = common . coerceToWord
+  back = coerceToFloat . back
+
+instance Focal Double where
+  common = common . coerceToWord
+  back = coerceToFloat . back
+
+instance Focal Int where
+  -- Go through `Word` to avoid sign-bit trickery.
+  common = toInteger . (\n -> fromIntegral n :: Word64)
+  back = fromIntegral . (\n -> back n :: Word64)
+
+instance Focal Int32 where
+  common = toInteger . (\n -> fromIntegral n :: Word32)
+  back = fromIntegral . (\n -> back n :: Word32)
+
+instance Focal Int64 where
+  common = toInteger . (\n -> fromIntegral n :: Word64)
+  back = fromIntegral . (\n -> back n :: Word64)
+
+-- | Unpack the 9 original values that were packed into an `Integer` during a Focal op.
+unpack :: Focal a => Integer -> [a]
+unpack = take 9 . unfoldr (\n -> Just (back n, shiftL n 64))
+
+{-
+THE STRATEGY (for real this time)
+
+The Inty types can convert to Integer easily.
+The Floats can get to Integer via `floating-bits`.
+
+To convert back, you pull out a list of Word64, and convert to your target type
+from there.
+
+Is Scientific better to use than `Integer`?
+Since many of the digits will be populated by values, Integer is probably correct here.
+-}
