@@ -47,7 +47,6 @@ module Geography.MapAlgebra
   , reproject
   , Sphere, LatLng, WebMercator
   , Point(..)
-  , Focal(..)
   -- * Map Algebra
   -- ** Local Operations
   -- | Operations between `Raster`s. If the source Rasters aren't the
@@ -103,7 +102,10 @@ module Geography.MapAlgebra
   , mean, variety, majority, minority, variance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
-  , fsum, fmean, fmax, fmin, fvariety
+  , Focal(..)
+  , fsum, fmean
+  , fmax, fmin
+  , fmajority, fminority, fvariety
   ) where
 
 import           Data.Array.Repa ((:.)(..), Z(..))
@@ -290,15 +292,25 @@ variety = fmap (length . nub) . sequenceA
 
 -- | The most frequently appearing value at each shared index.
 majority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster p r c a) -> Raster p r c a
-majority = fmap (fst . g . f) . sequenceA
+majority = fmap majo . sequenceA
+
+-- | Find the most common value in some `Foldable`.
+majo :: (Foldable t, Ord a) => t a -> a
+majo = fst . g . f
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
+{-# INLINE majo #-}
 
 -- | The least frequently appearing value at each shared index.
 minority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster p r c a) -> Raster p r c a
-minority = fmap (fst . g . f) . sequenceA
+minority = fmap mino . sequenceA
+
+-- | Find the least common value in some `Foldable`.
+mino :: (Foldable t, Ord a) => t a -> a
+mino = fst . g . f
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
         g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+{-# INLINE mino #-}
 
 -- | A measure of how spread out a dataset is. This calculation will fail
 -- with `Nothing` if a length 1 list is given.
@@ -347,6 +359,14 @@ fmin (Raster a) = Raster . R.map minimum $ focal R.BoundClamp a
 fvariety :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Int
 fvariety (Raster a) = Raster . R.map (length . L.nub) $ focal R.BoundClamp a
 
+-- | Focal Majority.
+fmajority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
+fmajority (Raster a) = Raster . R.map majo $ focal R.BoundClamp a
+
+-- | Focal Minority.
+fminority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
+fminority (Raster a) = Raster . R.map mino $ focal R.BoundClamp a
+
 -- | Yield all the values in a neighbourhood for further scrutiny.
 focal :: Focal a => R.Boundary Integer -> R.Array R.D R.DIM2 a -> R.Array R.D R.DIM2 [a]
 focal b a = R.map unpack . R.mapStencil2 b focalStencil $ R.map common a
@@ -371,7 +391,9 @@ focalStencil = R.makeStencil (R.ix2 3 3) f
         f _               = Nothing
 
 -- | Any type which is meaningful to perform focal operations on.
+--
 -- Law:
+--
 -- @
 -- back (common v) == v
 -- @
