@@ -106,6 +106,7 @@ module Geography.MapAlgebra
   , fsum, fmean
   , fmax, fmin
   , fmajority, fminority, fvariety
+  , fpercentage, fpercentile
   ) where
 
 import           Data.Array.Repa ((:.)(..), Z(..))
@@ -347,7 +348,7 @@ fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourho
   where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just (1/9)))
 
 -- TODO Not sure about the `Boundary` value to use here.
--- | Focal Maximum
+-- | Focal Maximum.
 fmax :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
 fmax (Raster a) = Raster . R.map maximum $ focal R.BoundClamp a
 
@@ -367,7 +368,20 @@ fmajority (Raster a) = Raster . R.map majo $ focal R.BoundClamp a
 fminority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
 fminority (Raster a) = Raster . R.map mino $ focal R.BoundClamp a
 
+-- | Focal Percentage, the percentage of neighbourhood values that are equal
+-- to the neighbourhood focus. Not to be confused with `fpercentile`.
+fpercentage :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Double
+fpercentage (Raster a) = Raster . R.map f $ focal R.BoundClamp a
+  where f vs = fromIntegral (length . filter (== head vs) $ tail vs) / 8
+
+-- | Focal Percentile, the percentage of neighbourhood values that are /less/
+-- than the neighbourhood focus. Not to be confused with `fpercentage`.
+fpercentile :: (Focal a, Ord a) => Raster p r c a -> Raster p r c Double
+fpercentile (Raster a) = Raster . R.map f $ focal R.BoundClamp a
+  where f vs = fromIntegral (length . filter (< head vs) $ tail vs) / 8
+
 -- | Yield all the values in a neighbourhood for further scrutiny.
+-- The first value of the list is the neighbourhood focus.
 focal :: Focal a => R.Boundary Integer -> R.Array R.D R.DIM2 a -> R.Array R.D R.DIM2 [a]
 focal b a = R.map unpack . R.mapStencil2 b focalStencil $ R.map common a
 {-# INLINE focal #-}
@@ -379,15 +393,15 @@ focal b a = R.map unpack . R.mapStencil2 b focalStencil $ R.map common a
 focalStencil :: R.Stencil R.DIM2 Integer
 focalStencil = R.makeStencil (R.ix2 3 3) f
   where f :: R.DIM2 -> Maybe Integer
-        f (Z :. -1 :. -1) = Just 1
+        f (Z :.  0 :.  0) = Just 1
         f (Z :. -1 :.  0) = Just (2^64)
         f (Z :. -1 :.  1) = Just (2^128)
-        f (Z :. 0  :. -1) = Just (2^196)
-        f (Z :. 0  :.  0) = Just (2^256)
-        f (Z :. 0  :.  1) = Just (2^320)
-        f (Z :. 1  :. -1) = Just (2^384)
-        f (Z :. 1  :.  0) = Just (2^448)
-        f (Z :. 1  :.  1) = Just (2^512)
+        f (Z :.  0 :. -1) = Just (2^196)
+        f (Z :. -1 :. -1) = Just (2^256)
+        f (Z :.  0 :.  1) = Just (2^320)
+        f (Z :.  1 :. -1) = Just (2^384)
+        f (Z :.  1 :.  0) = Just (2^448)
+        f (Z :.  1 :.  1) = Just (2^512)
         f _               = Nothing
 
 -- | Any type which is meaningful to perform focal operations on.
@@ -434,8 +448,7 @@ instance Focal Int64 where
 
 -- | Unpack the 9 original values that were packed into an `Integer` during a Focal op.
 unpack :: Focal a => Integer -> [a]
-unpack = take 9 . L.unfoldr (\n -> Just (back n, shiftL n 64))
-
+unpack = take 9 . L.unfoldr (\n -> Just (back n, shiftR n 64))
 {-
 THE STRATEGY (for real this time)
 
