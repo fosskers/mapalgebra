@@ -42,7 +42,7 @@ module Geography.MapAlgebra
   (
     -- * Types
     Raster(..)
-  , constant, fromUnboxed
+  , constant, fromUnboxed, fromList
   , Projection(..)
   , reproject
   , Sphere, LatLng, WebMercator
@@ -113,6 +113,7 @@ import           Data.Array.Repa ((:.)(..), Z(..))
 import qualified Data.Array.Repa as R
 import qualified Data.Array.Repa.Stencil as R
 import qualified Data.Array.Repa.Stencil.Dim2 as R
+import qualified Data.Array.Repa.Repr.Vector as R
 import           Data.Bits
 import           Data.Bits.Floating
 import           Data.Foldable
@@ -199,6 +200,29 @@ instance Projection WebMercator where
 -- @
 newtype Raster p (r :: Nat) (c :: Nat) a = Raster { _array :: R.Array R.D R.DIM2 a }
 
+-- TODO Might be able to do this sexier with Text.Printf.
+-- | Renders the first 10x10 values in your Raster.
+-- Be careful - this will evaluate your lazy Raster. For debugging purposes only!
+instance Show a => Show (Raster p r c a) where
+  show (Raster a) = unlines . map unwords $ groupsOf cols padded
+    where (Z :. r :. c) = R.extent a
+          rows = P.min r 10
+          cols = P.min c 10
+          window = R.extract (R.ix2 0 0) (R.ix2 rows cols) a
+          list = map show $ R.toList window
+          longest = foldl1 P.max $ map length list
+          padded = map (padTo longest) list
+
+-- | Pad whitespace to the front of a String so that it has a given length.
+padTo :: Int -> String -> String
+padTo n s = ((n - length s) `stimes` " ") ++ s
+
+-- | I wish this were in the Prelude.
+groupsOf :: Int -> [a] -> [[a]]
+groupsOf _ [] = []
+groupsOf n as = g : groupsOf n rest
+  where (g,rest) = splitAt n as
+
 instance Functor (Raster p r c) where
   fmap f (Raster a) = Raster $ R.map f a
   {-# INLINE fmap #-}
@@ -263,6 +287,15 @@ constant a = Raster $ R.fromFunction sh (const a)
 fromUnboxed :: forall p r c a. (KnownNat r, KnownNat c, U.Unbox a) => U.Vector a -> Maybe (Raster p r c a)
 fromUnboxed v | (r * c) == U.length v = Just . Raster . R.delay $ R.fromUnboxed (R.ix2 r c) v
               | otherwise = Nothing
+  where r = fromInteger $ natVal (Proxy :: Proxy r)
+        c = fromInteger $ natVal (Proxy :: Proxy c)
+
+-- | O(n). Create a `Raster` from a list of anything. Will fail if the size of the list
+-- does not match the declared size of the `Raster`. In general, should be used for
+-- debugging only.
+fromList :: forall p r c a. (KnownNat r, KnownNat c) => [a] -> Maybe (Raster p r c a)
+fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R.ix2 r c) l
+           | otherwise = Nothing
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
