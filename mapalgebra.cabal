@@ -22,7 +22,7 @@ extra-source-files:
 library
   hs-source-dirs:
       lib
-  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches -fwarn-incomplete-patterns
+  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches -fwarn-incomplete-patterns -Wincomplete-uni-patterns
   build-depends:
       base >= 4.7 && < 4.11
     , containers
@@ -39,7 +39,7 @@ test-suite mapalgebra-test
   main-is: Test.hs
   hs-source-dirs:
       test
-  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches -fwarn-incomplete-patterns -threaded
+  ghc-options: -fwarn-unused-imports -fwarn-unused-binds -fwarn-name-shadowing -fwarn-unused-matches -fwarn-incomplete-patterns -Wincomplete-uni-patterns -threaded
   build-depends:
       base >= 4.7 && < 4.11
     , containers

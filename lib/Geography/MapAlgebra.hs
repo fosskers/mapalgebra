@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DataKinds, KindSignatures, ScopedTypeVariables #-}
 -- {-# LANGUAGE Strict #-}  -- Does this improve performance?
@@ -113,6 +114,7 @@ import           Data.Array.Repa ((:.)(..), Z(..))
 import qualified Data.Array.Repa as R
 import qualified Data.Array.Repa.Stencil as R
 import qualified Data.Array.Repa.Stencil.Dim2 as R
+import           Data.Array.Repa.Stencil.Dim2 (makeStencil2)
 import qualified Data.Array.Repa.Repr.Vector as R
 import           Data.Bits
 import           Data.Bits.Floating
@@ -204,7 +206,7 @@ newtype Raster p (r :: Nat) (c :: Nat) a = Raster { _array :: R.Array R.D R.DIM2
 -- | Renders the first 10x10 values in your Raster.
 -- Be careful - this will evaluate your lazy Raster. For debugging purposes only!
 instance Show a => Show (Raster p r c a) where
-  show (Raster a) = unlines . map unwords $ groupsOf cols padded
+  show (Raster a) = ('\n' :) . unlines . map unwords $ groupsOf cols padded
     where (Z :. r :. c) = R.extent a
           rows = P.min r 10
           cols = P.min c 10
@@ -373,12 +375,24 @@ zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
 -- | Focal Addition.
 fsum :: Num a => Raster p r c a -> Raster p r c a
 fsum (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
-  where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just 1))
+  where neighbourhood = [R.stencil2| 1 1 1
+                                     1 1 1
+                                     1 1 1 |]
 
 -- | Focal Mean.
 fmean :: Fractional a => Raster p r c a -> Raster p r c a
 fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
-  where neighbourhood = R.makeStencil (R.ix2 3 3) (const (Just (1/9)))
+  where neighbourhood = R.makeStencil (R.ix2 3 3) f
+        f (Z :. -1 :. -1) = Just $ 1/9
+        f (Z :. -1 :.  0) = Just $ 1/9
+        f (Z :. -1 :.  1) = Just $ 1/9
+        f (Z :.  0 :. -1) = Just $ 1/9
+        f (Z :.  0 :.  0) = Just $ 1/9
+        f (Z :.  0 :.  1) = Just $ 1/9
+        f (Z :.  1 :. -1) = Just $ 1/9
+        f (Z :.  1 :.  0) = Just $ 1/9
+        f (Z :.  1 :.  1) = Just $ 1/9
+        f _               = Nothing
 
 -- TODO Not sure about the `Boundary` value to use here.
 -- | Focal Maximum.

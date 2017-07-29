@@ -37,6 +37,11 @@ suite = testGroup "Unit Tests"
     -- takes ~68 seconds
 --    , testCase "(+) big" $ runIdentity (R.sumAllP . _array $ big + big) @?= 21474836480 * 2
     ]
+  , testGroup "Focal Ops"
+    [ testCase "fvariety" $ fvariety one @?= one
+    , testCase "fmax" $ fmax one @?= one
+    , testCase "fmin" $ fmin one @?= one
+    ]
   , testGroup "Focal Typeclass"
     [ testProperty "Word32" (\(v :: Word32) -> back (common v) == v)
     , testProperty "Word64" (\(v :: Word64) -> back (common v) == v)

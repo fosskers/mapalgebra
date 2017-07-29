@@ -18,6 +18,7 @@ ghc-options:
   - -fwarn-name-shadowing
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
+  - -Wincomplete-uni-patterns
 
 dependencies:
   - base >= 4.7 && < 4.11
