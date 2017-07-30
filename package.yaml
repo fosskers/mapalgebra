@@ -24,7 +24,7 @@ dependencies:
   - base >= 4.7 && < 4.11
   - containers
   - repa >= 3.4 && < 3.5
-  - repa-algorithms >= 3.4 && < 3.5
+  # - repa-algorithms >= 3.4 && < 3.5
   - floating-bits >= 0.3 && < 0.4
   - vector >= 0.11 && < 0.13
 

@@ -56,10 +56,10 @@ suite = testGroup "Unit Tests"
     ]
   ]
 
-one :: Raster p 10 10 Int
+one :: Raster p 7 7 Int
 one = constant 1
 
-two :: Raster p 10 10 Int
+two :: Raster p 7 7 Int
 two = constant 2
 
 small :: Raster WebMercator 256 256 Int
@@ -71,10 +71,3 @@ big = constant 5
 -- | Should have two rows and 3 columns.
 arr :: R.Array R.U R.DIM2 Int
 arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
-
-focal :: Maybe (Raster p 5 5 Int)
-focal = fromUnboxed $ U.fromList [1, 1, 1, 1, 1
-                                 ,1, 2, 2, 2, 1
-                                 ,1, 2, 3, 2, 1
-                                 ,1, 2, 2, 2, 1
-                                 ,1, 1, 1, 1, 1]

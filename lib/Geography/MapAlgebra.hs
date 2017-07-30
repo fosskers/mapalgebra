@@ -212,7 +212,7 @@ instance Show a => Show (Raster p r c a) where
           cols = P.min c 10
           window = R.extract (R.ix2 0 0) (R.ix2 rows cols) a
           list = map show $ R.toList window
-          longest = foldl1 P.max $ map length list
+          longest = maximum $ map length list
           padded = map (padTo longest) list
 
 -- | Pad whitespace to the front of a String so that it has a given length.
@@ -443,7 +443,7 @@ focalStencil = R.makeStencil (R.ix2 3 3) f
         f (Z :.  0 :.  0) = Just 1
         f (Z :. -1 :.  0) = Just (2^64)
         f (Z :. -1 :.  1) = Just (2^128)
-        f (Z :.  0 :. -1) = Just (2^196)
+        f (Z :.  0 :. -1) = Just (2^192)
         f (Z :. -1 :. -1) = Just (2^256)
         f (Z :.  0 :.  1) = Just (2^320)
         f (Z :.  1 :. -1) = Just (2^384)
