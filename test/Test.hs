@@ -43,13 +43,14 @@ suite = testGroup "Unit Tests"
     , testCase "fmin" $ fmin one @?= one
     ]
   , testGroup "Focal Typeclass"
-    [ testProperty "Word32" (\(v :: Word32) -> back (common v) == v)
+    [ testProperty "Word8"  (\(v :: Word8)  -> back (common v) == v)
+    , testProperty "Word32" (\(v :: Word32) -> back (common v) == v)
     , testProperty "Word64" (\(v :: Word64) -> back (common v) == v)
-    , testProperty "Float"  (\(v :: Float) -> back (common v) == v)
+    , testProperty "Float"  (\(v :: Float)  -> back (common v) == v)
     , testProperty "Double" (\(v :: Double) -> back (common v) == v)
-    , testProperty "Int"    (\(v :: Int) -> back (common v) == v)
-    , testProperty "Int32"  (\(v :: Int32) -> back (common v) == v)
-    , testProperty "Int64"  (\(v :: Int64) -> back (common v) == v)
+    , testProperty "Int"    (\(v :: Int)    -> back (common v) == v)
+    , testProperty "Int32"  (\(v :: Int32)  -> back (common v) == v)
+    , testProperty "Int64"  (\(v :: Int64)  -> back (common v) == v)
     ]
   , testGroup "Repa Behaviour"
     [ testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3

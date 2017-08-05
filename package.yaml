@@ -4,9 +4,9 @@ synopsis:            Map Algebra types and common operations.
 description:         Map Algebra types and common operations.
 homepage:            https://github.com/fosskers/mapalgebra
 license:             BSD3
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2017 Author name here
+author:              Colin Woodbury
+maintainer:          colingw@gmail.com
+copyright:           2017 Colin Woodbury
 category:            Geography
 
 extra-source-files:
@@ -22,10 +22,12 @@ ghc-options:
 
 dependencies:
   - base >= 4.7 && < 4.11
+  # - bytestring
   - containers
+  - floating-bits >= 0.3 && < 0.4
+  - JuicyPixels >= 3.2 && < 3.3
   - repa >= 3.4 && < 3.5
   # - repa-algorithms >= 3.4 && < 3.5
-  - floating-bits >= 0.3 && < 0.4
   - vector >= 0.11 && < 0.13
 
 library:

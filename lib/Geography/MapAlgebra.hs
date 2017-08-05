@@ -35,15 +35,31 @@
 {- TODO
 
 Benchmark against numpy as well as GT's collections API
-Checkout `repa-io`
 
 -}
 
 module Geography.MapAlgebra
   (
-    -- * Types
+  -- * Types
+  -- ** Rasters
     Raster(..)
+  -- *** Creation
   , constant, fromUnboxed, fromList
+  -- , fromPng, fromTiff
+  -- *** Conversion and IO
+  -- | Some of these are re-exports from JuicyPixels. Exposing them here saves you an
+  -- explicit dependency and import.
+  --
+  -- @
+  -- rast :: Raster p 256 256 Word8
+  -- rast = fromJust . fromList . concat $ replicate 256 [0..255]
+  --
+  -- writePng "foo.png" $ grayscale rast
+  -- @
+  , grayscale
+  , encodePng, encodeTiff
+  , writePng, writeTiff
+  -- ** Projections
   , Projection(..)
   , reproject
   , Sphere, LatLng, WebMercator
@@ -110,12 +126,14 @@ module Geography.MapAlgebra
   , fpercentage, fpercentile
   ) where
 
+import           Codec.Picture
 import           Data.Array.Repa ((:.)(..), Z(..))
 import qualified Data.Array.Repa as R
 import qualified Data.Array.Repa.Stencil as R
 import qualified Data.Array.Repa.Stencil.Dim2 as R
 import           Data.Array.Repa.Stencil.Dim2 (makeStencil2)
 import qualified Data.Array.Repa.Repr.Vector as R
+import qualified Data.Array.Repa.Repr.ForeignPtr as R
 import           Data.Bits
 import           Data.Bits.Floating
 import           Data.Foldable
@@ -125,6 +143,7 @@ import           Data.List.NonEmpty (NonEmpty(..), nub)
 import qualified Data.Map.Strict as M
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
+import qualified Data.Vector.Storable as S
 import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           GHC.TypeLits
@@ -301,6 +320,20 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
+-- TODO
+-- fromPng :: BL.ByteString -> Either String (Raster p r c a)
+-- fromPng bs = undefined
+
+-- fromTiff :: BL.ByteString -> Either String (Raster p r c a)
+-- fromTiff bs = undefined
+
+-- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
+-- This will evaluate your lazy `Raster`.
+grayscale ::  Raster p r c Word8 -> Image Pixel8
+grayscale (Raster a) = Image w h (S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w))
+  where (Z :. h :. w) = R.extent arr
+        arr = R.computeS a
+
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
 --
@@ -358,7 +391,6 @@ variance rs = Just (f <$> sequenceA rs)
         f os@(n :| ns) = foldl' (\acc m -> acc + ((m - av) ^ 2)) ((n - av) ^ 2) ns / (len - 1)
           where av = avg os
 
-
 -- Old implementation that was replaced with `sequenceA` usage above. I wonder if this is faster?
 -- Leaving it here in case we feel like comparing later.
 --listEm :: (Projection p, KnownNat r, KnownNat c) => NonEmpty (Raster p r c a) -> Raster p r c (NonEmpty a)
@@ -394,7 +426,6 @@ fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourho
         f (Z :.  1 :.  1) = Just $ 1/9
         f _               = Nothing
 
--- TODO Not sure about the `Boundary` value to use here.
 -- | Focal Maximum.
 fmax :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
 fmax (Raster a) = Raster . R.map maximum $ focal R.BoundClamp a
@@ -415,6 +446,7 @@ fmajority (Raster a) = Raster . R.map majo $ focal R.BoundClamp a
 fminority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
 fminority (Raster a) = Raster . R.map mino $ focal R.BoundClamp a
 
+-- TODO Not sure about the `Boundary` value to use here.
 -- | Focal Percentage, the percentage of neighbourhood values that are equal
 -- to the neighbourhood focus. Not to be confused with `fpercentile`.
 fpercentage :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Double
@@ -464,6 +496,10 @@ class Focal a where
   -- | Shave the first 64 bits off an `Integer` and recreate the original value.
   back :: Integer -> a
 
+instance Focal Word8 where
+  common = toInteger
+  back = fromInteger
+
 instance Focal Word32 where
   common = toInteger
   back = fromIntegral
@@ -496,15 +532,3 @@ instance Focal Int64 where
 -- | Unpack the 9 original values that were packed into an `Integer` during a Focal op.
 unpack :: Focal a => Integer -> [a]
 unpack = take 9 . L.unfoldr (\n -> Just (back n, shiftR n 64))
-{-
-THE STRATEGY (for real this time)
-
-The Inty types can convert to Integer easily.
-The Floats can get to Integer via `floating-bits`.
-
-To convert back, you pull out a list of Word64, and convert to your target type
-from there.
-
-Is Scientific better to use than `Integer`?
-Since many of the digits will be populated by values, Integer is probably correct here.
--}
