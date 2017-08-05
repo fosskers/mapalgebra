@@ -330,7 +330,7 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
 -- This will evaluate your lazy `Raster`.
 grayscale ::  Raster p r c Word8 -> Image Pixel8
-grayscale (Raster a) = Image w h (S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w))
+grayscale (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w)
   where (Z :. h :. w) = R.extent arr
         arr = R.computeS a
 
