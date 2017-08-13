@@ -19,15 +19,15 @@ ghc-options:
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
   - -Wincomplete-uni-patterns
+  - -O2
 
 dependencies:
   - base >= 4.7 && < 4.11
-  # - bytestring
+  - bytestring
   - containers
   - floating-bits >= 0.3 && < 0.4
   - JuicyPixels >= 3.2 && < 3.3
   - repa >= 3.4 && < 3.5
-  # - repa-algorithms >= 3.4 && < 3.5
   - vector >= 0.11 && < 0.13
 
 library:

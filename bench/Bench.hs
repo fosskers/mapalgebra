@@ -14,44 +14,81 @@ import           Geography.MapAlgebra
 main :: IO ()
 main = defaultMain
   [ bgroup "Encoding"
-    [
-      bench "encodePng - 256"  $ nf encodePng img256
-    , bench "encodePng - 1024" $ nf encodePng img1024
+    [ bgroup "Grayscale"
+      [
+      --   bench "encodePng - 256"  $ nf encodePng gray256
+      -- , bench "encodePng - 1024" $ nf encodePng gray1024
 
-    , bench "encodeTiff - 256"  $ nf encodeTiff img256
-    , bench "encodeTiff - 1024" $ nf encodeTiff img1024
+      -- , bench "encodeTiff - 256"  $ nf encodeTiff gray256
+      -- , bench "encodeTiff - 1024" $ nf encodeTiff gray1024
 
-    , bench "PNG 256 Constant"    $ nf (encodePng . grayscale) (constant 125 :: Raster p 256 256 Word8)
-    , bench "PNG 256 fromList"    $ nf (encodePng . grayscale) small
-    , bench "PNG 256 fromUnboxed" $ nf (encodePng . grayscale) smallV
+      -- , bench "PNG 256 Constant"    $ nf (encodePng . grayscale) (constant 125 :: Raster p 256 256 Word8)
+      -- , bench "PNG 256 fromList"    $ nf (encodePng . grayscale) small
+      -- , bench "PNG 256 fromUnboxed" $ nf (encodePng . grayscale) smallV
 
-    , bench "PNG 1024 Constant"    $ nf (encodePng . grayscale) (constant 125 :: Raster p 1024 1024 Word8)
-    , bench "PNG 1024 fromList"    $ nf (encodePng . grayscale) big
-    , bench "PNG 1024 fromUnboxed" $ nf (encodePng . grayscale) bigV
+      -- , bench "PNG 1024 Constant"    $ nf (encodePng . grayscale) (constant 125 :: Raster p 1024 1024 Word8)
+      -- , bench "PNG 1024 fromList"    $ nf (encodePng . grayscale) big
+      -- , bench "PNG 1024 fromUnboxed" $ nf (encodePng . grayscale) bigV
 
-    , bench "TIFF 256 Constant"    $ nf (encodeTiff . grayscale) (constant 125 :: Raster p 256 256 Word8)
-    , bench "TIFF 256 fromList"    $ nf (encodeTiff . grayscale) small
-    , bench "TIFF 256 fromUnboxed" $ nf (encodeTiff . grayscale) smallV
+      -- , bench "TIFF 256 Constant"    $ nf (encodeTiff . grayscale) (constant 125 :: Raster p 256 256 Word8)
+      -- , bench "TIFF 256 fromList"    $ nf (encodeTiff . grayscale) small
+      -- , bench "TIFF 256 fromUnboxed" $ nf (encodeTiff . grayscale) smallV
 
-    , bench "TIFF 1024 Constant"    $ nf (encodeTiff . grayscale) (constant 125 :: Raster p 1024 1024 Word8)
-    , bench "TIFF 1024 fromList"    $ nf (encodeTiff . grayscale) big
-    , bench "TIFF 1024 fromUnboxed" $ nf (encodeTiff . grayscale) bigV
+      -- , bench "TIFF 1024 Constant"    $ nf (encodeTiff . grayscale) (constant 125 :: Raster p 1024 1024 Word8)
+      -- , bench "TIFF 1024 fromList"    $ nf (encodeTiff . grayscale) big
+      -- , bench "TIFF 1024 fromUnboxed" $ nf (encodeTiff . grayscale) bigV
+      ]
+    , bgroup "RGBA"
+      [
+        bench "generateImage - 256"  $ nf pixelImg 256
+      -- , bench "generateImage - 1024" $ nf pixelImg 1024
+      -- , bench "encodePng - 256"  $ nf encodePng rgba256
+      -- , bench "encodePng - 1024" $ nf encodePng rgba1024
+
+      -- , bench "encodeTiff - 256"  $ nf encodeTiff rgba256
+      -- , bench "encodeTiff - 1024" $ nf encodeTiff rgba1024
+
+      , bench "rgba - 256"  $ nf (encodePng . rgba) pixels256
+      , bench "rgba - 1024" $ nf (encodePng . rgba) pixels1024
+      ]
     ]
+    , bgroup "Local Operations"
+      [
+        -- bench "classify 256" $ nf (classify (PixelRGBA8 0 0 0 0) gray) small
+      ]
   ]
-  where small :: Raster p 256 256 Word8
-        small = fromJust . fromList $ replicate (256*256) 125
 
-        smallV :: Raster p 256 256 Word8
-        smallV = fromJust . fromUnboxed $ U.replicate (256*256) 125
+small :: Raster p 256 256 Word8
+small = fromJust . fromList $ replicate (256*256) 1
 
-        big :: Raster p 1024 1024 Word8
-        big = fromJust . fromList $ replicate (1024*1024) 125
+smallV :: Raster p 256 256 Word8
+smallV = fromJust . fromUnboxed $ U.replicate (256*256) 1
 
-        bigV :: Raster p 1024 1024 Word8
-        bigV = fromJust . fromUnboxed $ U.replicate (1024*1024) 125
+big :: Raster p 1024 1024 Word8
+big = constant 1 -- fromJust . fromList $ replicate (1024*1024) 1
 
-img256 :: Image Word8
-img256 = generateImage (\_ _ -> 125) 256 256
+bigV :: Raster p 1024 1024 Word8
+bigV = fromJust . fromUnboxed $ U.replicate (1024*1024) 1
 
-img1024 :: Image Word8
-img1024 = generateImage (\_ _ -> 125) 1024 1024
+pixels256 :: Raster p 256 256 PixelRGBA8
+pixels256 = constant $ PixelRGBA8 125 125 125 maxBound
+-- pixels256 = classify (PixelRGBA8 0 0 0 0) gray small
+
+pixels1024 :: Raster p 1024 1024 PixelRGBA8
+pixels1024 = constant $ PixelRGBA8 125 125 125 maxBound
+-- pixels1024 = classify (PixelRGBA8 0 0 0 0) gray big
+
+gray256 :: Image Word8
+gray256 = generateImage (\_ _ -> 125) 256 256
+
+gray1024 :: Image Word8
+gray1024 = generateImage (\_ _ -> 125) 1024 1024
+
+pixelImg :: Int -> Image PixelRGBA8
+pixelImg n = generateImage (\_ _ -> PixelRGBA8 125 125 125 maxBound) n n
+
+rgba256 :: Image PixelRGBA8
+rgba256 = pixelImg 256
+
+rgba1024 :: Image PixelRGBA8
+rgba1024 = pixelImg 1024

@@ -46,8 +46,13 @@ module Geography.MapAlgebra
   -- *** Creation
   , constant, fromUnboxed, fromList
   -- , fromPng, fromTiff
-  -- *** Conversion and IO
-  -- | Some of these are re-exports from JuicyPixels. Exposing them here saves you an
+  -- *** Colouring
+  -- | These `Data.Map.Lazy.Map`s can be used with `classify` to map a `Raster` to a state which
+  -- can further be transformed into an `Image` via functions like `rgba`.
+  , invisible
+  , gray
+  -- *** Image Conversion and IO
+  -- | Some of these functions are re-exports from JuicyPixels. Exposing them here saves you an
   -- explicit dependency and import.
   --
   -- @
@@ -56,7 +61,7 @@ module Geography.MapAlgebra
   --
   -- writePng "foo.png" $ grayscale rast
   -- @
-  , grayscale
+  , grayscale, rgba
   , encodePng, encodeTiff
   , writePng, writeTiff
   -- ** Projections
@@ -136,6 +141,7 @@ import qualified Data.Array.Repa.Repr.Vector as R
 import qualified Data.Array.Repa.Repr.ForeignPtr as R
 import           Data.Bits
 import           Data.Bits.Floating
+import           Data.Functor.Identity (runIdentity)
 import           Data.Foldable
 import           Data.Int
 import qualified Data.List as L
@@ -320,6 +326,16 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
+-- | An invisible pixel (alpha channel set to 0).
+invisible :: PixelRGBA8
+invisible = PixelRGBA8 0 0 0 0
+
+-- | Sets each RGB channel to the key value. Example: for a `Word8` value
+-- of 125, each channel will be set to 125. The alpha channel is set to 100% opacity.
+gray :: M.Map Word8 PixelRGBA8
+gray = M.fromList $ map f [0..]
+  where f w = (0, PixelRGBA8 w w w maxBound)
+
 -- TODO
 -- fromPng :: BL.ByteString -> Either String (Raster p r c a)
 -- fromPng bs = undefined
@@ -328,11 +344,27 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
 -- fromTiff bs = undefined
 
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
--- This will evaluate your lazy `Raster`.
-grayscale ::  Raster p r c Word8 -> Image Pixel8
+-- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"
+-- the more cores you add (say, @+RTS -N4@).
+grayscale :: Raster p r c Word8 -> Image Pixel8
 grayscale (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w)
   where (Z :. h :. w) = R.extent arr
-        arr = R.computeS a
+        arr = runIdentity $ R.computeP a
+
+-- | O(k + 1). Transform a `Raster` of pixels into a generic `Image`, ready
+-- for further encoding into a PNG or TIFF. The same conditions as `grayscale` apply.
+rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
+rgba (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w*z)
+  where (Z :. h :. w :. z) = R.extent arr
+        arr = runIdentity . R.computeP $ toRGBA a
+
+-- | Expand a `Raster`'s inner Array into a format that JuicyPixels will like better.
+toRGBA :: R.Array R.D R.DIM2 PixelRGBA8 -> R.Array R.D R.DIM3 Word8
+toRGBA a = R.traverse a (\(Z :. r :. c) -> Z :. r :. c :. 4) f
+  where f g (Z :. r :. c :. 0) = (\(PixelRGBA8 w _ _ _) -> w) $ g (Z :. r :. c)
+        f g (Z :. r :. c :. 1) = (\(PixelRGBA8 _ w _ _) -> w) $ g (Z :. r :. c)
+        f g (Z :. r :. c :. 2) = (\(PixelRGBA8 _ _ w _) -> w) $ g (Z :. r :. c)
+        f g (Z :. r :. c :. _) = (\(PixelRGBA8 _ _ _ w) -> w) $ g (Z :. r :. c)
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.

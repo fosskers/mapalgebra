@@ -1,0 +1,66 @@
+#+TITLE: MapAlgebra
+#+AUTHOR: Colin
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="/home/colin/code/org-theme.css"/>
+
+** Benchmarking
+
+*** PNGs - Manual indexing vs. Shared Memory
+
+ This is a comparison of approaches in performing the transformation
+ ~Raster p r c PixelRGBA8 -> Image PixelRGBA8~. The built-in ~encodePalettedPng~
+ function provides a similar transformation of ~Raster p r c Word8 -> Image Pixel8~,
+ but that wouldn't allow us to use the alpha channel. It is quite fast, but we can't
+ consider it here.
+
+ The /manual indexing/ approach uses the ~generateImage~ function from JuicyPixels
+ while indexing through every element of the Raster. This is not parallelizable.
+
+ #+BEGIN_SRC haskell
+ -- | Manual indexing method (no memory sharing).
+ rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
+ rgba (Raster a) = generateImage f w h
+   where (Z :. h :. w) = R.extent a
+         f c r = R.unsafeIndex a (Z :. r :. c)
+ #+END_SRC
+
+ The /shared memory/ approach borrows some code from ~JuicyPixel-repa~ to
+ construct an ~Image~ from a fully computed ~Array~. The Array is given the ~F~
+ type hint ("Foreign") so that we just need to pass a pointer to it in order
+ to build the ~Image~ (since the internal data in ~Image~ is a ~Data.Vector.Storable~).
+
+ #+BEGIN_SRC haskell
+ -- | Memory sharing approach.
+ shared :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
+ shared (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w*z)
+   where (Z :. h :. w :. z) = R.extent arr
+         arr = runIdentity . R.computeP $ toRGBA a
+ #+END_SRC
+
+ This uses ~computeP~ as well, assuming that all input Rasters will be large
+ enough to make this worth it. I've benchmarked elsewhere that it's worth it to
+ use ~computeP~ even for 256x256 rasters.
+
+ /All times are in milliseconds. The first two extra ops were simple local addition,
+ and the 3rd op is a focal addition, which seems to have much more overhead./
+
+ *Manual Indexing*
+
+ | Cores | Classify |  1 op | 2 ops | 3 ops |
+ |-------+----------+-------+-------+-------|
+ |     1 |    8.450 | 9.790 | 13.79 | 269.4 |
+ |     2 |     9.16 | 10.47 | 14.85 | 291.7 |
+ |     4 |     9.58 | 11.08 | 15.21 | 309.8 |
+ |     8 |    11.17 | 13.12 |  17.7 | 407.7 |
+
+ *Shared Memory*
+
+ | Cores | Classify |  1 op | 2 ops | 3 ops |
+ |-------+----------+-------+-------+-------|
+ |     1 |    31.57 | 36.53 | 48.13 |  1064 |
+ |     2 |    17.12 | 19.69 | 25.29 | 539.3 |
+ |     4 |    14.08 | 10.41 | 22.16 | 350.5 |
+ |     8 |    11.12 | 12.59 | 15.56 | 219.1 |
+
+ Since the /shared memory/ approach uses ~computeP~, its performance improves
+ as more cores are added. This is the environment we'd be using the library in
+ anyway (say, 16 or 32 cores), so the shared memory approach should be used here.
