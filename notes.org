@@ -17,8 +17,8 @@
 
  #+BEGIN_SRC haskell
  -- | Manual indexing method (no memory sharing).
- rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
- rgba (Raster a) = generateImage f w h
+ indexing :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
+ indexing (Raster a) = generateImage f w h
    where (Z :. h :. w) = R.extent a
          f c r = R.unsafeIndex a (Z :. r :. c)
  #+END_SRC

@@ -264,8 +264,7 @@ instance (KnownNat r, KnownNat c) => Applicative (Raster p r c) where
 
 -- | Be careful - this will evaluate your lazy Raster.
 instance Eq a => Eq (Raster p r c a) where
-  -- TODO: Check size and perform parallel version if big enough.
-  (Raster a) == (Raster b) = R.equalsS a b
+  (Raster a) == (Raster b) = runIdentity $ R.equalsP a b
   {-# INLINE (==) #-}
 
 instance (Monoid a, KnownNat r, KnownNat c) => Monoid (Raster p r c a) where
@@ -295,7 +294,6 @@ instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster p r c a) w
 
   fromRational = constant . fromRational
 
--- TODO: Use rules / checks to use `foldAllP` is the Raster has the right type / size.
 -- | Be careful - these operations will evaluate your lazy Raster. (Except
 -- `length`, which has a specialized O(1) implementation.)
 instance Foldable (Raster p r c) where
