@@ -3,6 +3,7 @@
 
 module Main where
 
+import           Codec.Picture
 import qualified Data.Array.Repa as R
 import           Data.Int
 import qualified Data.Vector.Unboxed as U
@@ -22,6 +23,7 @@ suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)" $ length small @?= 65536
     , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
+    , testCase "fromImage (256x256)" $ fmap length (fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assert (small == small)
@@ -72,3 +74,6 @@ big = constant 5
 -- | Should have two rows and 3 columns.
 arr :: R.Array R.U R.DIM2 Int
 arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
+
+img :: Image Pixel8
+img = generateImage (\_ _ -> 5) 256 256

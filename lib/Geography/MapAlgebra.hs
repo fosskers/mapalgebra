@@ -44,7 +44,7 @@ module Geography.MapAlgebra
   -- ** Rasters
     Raster(..)
   -- *** Creation
-  , constant, fromUnboxed, fromList
+  , constant, fromUnboxed, fromList, fromImage, fromTiff
   -- , fromPng, fromTiff
   -- *** Colouring
   -- | These `Data.Map.Lazy.Map`s can be used with `classify` to map a `Raster` to a state which
@@ -134,15 +134,16 @@ module Geography.MapAlgebra
 import           Codec.Picture
 import           Data.Array.Repa ((:.)(..), Z(..))
 import qualified Data.Array.Repa as R
-import qualified Data.Array.Repa.Stencil as R
-import qualified Data.Array.Repa.Stencil.Dim2 as R
-import           Data.Array.Repa.Stencil.Dim2 (makeStencil2)
-import qualified Data.Array.Repa.Repr.Vector as R
 import qualified Data.Array.Repa.Repr.ForeignPtr as R
+import qualified Data.Array.Repa.Repr.Vector as R
+import qualified Data.Array.Repa.Stencil as R
+import           Data.Array.Repa.Stencil.Dim2 (makeStencil2)
+import qualified Data.Array.Repa.Stencil.Dim2 as R
 import           Data.Bits
 import           Data.Bits.Floating
-import           Data.Functor.Identity (runIdentity)
+import qualified Data.ByteString as BS
 import           Data.Foldable
+import           Data.Functor.Identity (runIdentity)
 import           Data.Int
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..), nub)
@@ -324,6 +325,24 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
+-- | O(1). Create `Raster` from a JuicyPixels image.
+-- Will fail if the size of the `Image` does not match the declared size of the `Raster`.
+fromImage :: forall p r c a. (KnownNat r, KnownNat c) => Image Pixel8 -> Maybe (Raster p r c Word8)
+fromImage img
+  | imageWidth img /= c || imageHeight img /= r = Nothing
+  | otherwise = Just . Raster . R.delay . R.fromForeignPtr (R.ix2 r c) . fst . S.unsafeToForeignPtr0 $ imageData img
+  where r = fromInteger $ natVal (Proxy :: Proxy r)
+        c = fromInteger $ natVal (Proxy :: Proxy c)
+
+-- TODO: This need to able to handle more values types than `Word8`.
+-- | O(n). Create a `Raster` from a TIFF image. You must know and declare the size of the TIFF
+-- ahead of time, and your declaration must agree with the dimensions actually decoded
+-- from the given `BS.ByteString`.
+fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Raster p r c Word8)
+fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f >>= fromImage
+  where f (ImageY8 img) = Just img
+        f _ = Nothing
+
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: PixelRGBA8
 invisible = PixelRGBA8 0 0 0 0
@@ -333,13 +352,6 @@ invisible = PixelRGBA8 0 0 0 0
 gray :: M.Map Word8 PixelRGBA8
 gray = M.fromList $ map f [0..]
   where f w = (0, PixelRGBA8 w w w maxBound)
-
--- TODO
--- fromPng :: BL.ByteString -> Either String (Raster p r c a)
--- fromPng bs = undefined
-
--- fromTiff :: BL.ByteString -> Either String (Raster p r c a)
--- fromTiff bs = undefined
 
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
 -- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"
