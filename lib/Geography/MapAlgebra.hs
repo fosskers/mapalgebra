@@ -47,10 +47,14 @@ module Geography.MapAlgebra
   , constant, fromUnboxed, fromList, fromImage, fromTiff
   -- , fromPng, fromTiff
   -- *** Colouring
-  -- | These `Data.Map.Lazy.Map`s can be used with `classify` to map a `Raster` to a state which
-  -- can further be transformed into an `Image` via functions like `rgba`.
+  -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
+  -- transformed into an `Image` by `rgba`.
+  --
+  --   * The functions can be used with `fmap` when you expect every input value to map to a unique colour.
+  --   * The `M.Map`s can be used with `classify` to transform /ranges/ of values into certain colours.
+  --   * `invisible` can be used as the default value to `classify`, to make invisible any value that falls outside the range of the `M.Maps`.
   , invisible
-  , gray
+  , gray, red, green, blue
   -- *** Image Conversion and IO
   -- | Some of these functions are re-exports from JuicyPixels. Exposing them here saves you an
   -- explicit dependency and import.
@@ -325,7 +329,7 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
--- | O(1). Create `Raster` from a JuicyPixels image.
+-- | O(1). Create a `Raster` from a JuicyPixels image.
 -- Will fail if the size of the `Image` does not match the declared size of the `Raster`.
 fromImage :: forall p r c a. (KnownNat r, KnownNat c) => Image Pixel8 -> Maybe (Raster p r c Word8)
 fromImage img
@@ -335,9 +339,8 @@ fromImage img
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
 -- TODO: This need to able to handle more values types than `Word8`.
--- | O(n). Create a `Raster` from a TIFF image. You must know and declare the size of the TIFF
--- ahead of time, and your declaration must agree with the dimensions actually decoded
--- from the given `BS.ByteString`.
+-- | O(n). Create a `Raster` from a TIFF image.
+-- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
 fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Raster p r c Word8)
 fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f >>= fromImage
   where f (ImageY8 img) = Just img
@@ -349,9 +352,20 @@ invisible = PixelRGBA8 0 0 0 0
 
 -- | Sets each RGB channel to the key value. Example: for a `Word8` value
 -- of 125, each channel will be set to 125. The alpha channel is set to 100% opacity.
-gray :: M.Map Word8 PixelRGBA8
-gray = M.fromList $ map f [0..]
-  where f w = (0, PixelRGBA8 w w w maxBound)
+gray :: Word8 -> PixelRGBA8
+gray w = PixelRGBA8 w w w maxBound
+
+-- | Every value maps to a shade of red.
+red :: Word8 -> PixelRGBA8
+red w = PixelRGBA8 w 0 0 maxBound
+
+-- | Every value maps to a shade of green.
+green :: Word8 -> PixelRGBA8
+green w = PixelRGBA8 0 w 0 maxBound
+
+-- | Every value maps to a shade of blue.
+blue :: Word8 -> PixelRGBA8
+blue w = PixelRGBA8 0 0 w maxBound
 
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
 -- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"
