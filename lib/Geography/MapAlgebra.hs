@@ -1,7 +1,5 @@
 {-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DataKinds, KindSignatures, ScopedTypeVariables #-}
--- {-# LANGUAGE Strict #-}  -- Does this improve performance?
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -47,7 +45,7 @@ module Geography.MapAlgebra
   -- ** Rasters
     Raster(..)
   -- *** Creation
-  , constant, fromUnboxed, fromList, fromImage, fromTiff
+  , constant, fromFunction, fromUnboxed, fromList, fromImage, fromTiff
   -- , fromPng, fromTiff
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
@@ -161,7 +159,7 @@ import           Data.Functor.Identity (runIdentity)
 import           Data.Int
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..), nub)
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Lazy as M
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
 import qualified Data.Vector.Storable as S
@@ -317,9 +315,13 @@ instance Foldable (Raster p r c) where
   -- | O(1).
   length (Raster a) = R.size $ R.extent a
 
--- | O(1). Create a `Raster` of any size which has the same value everywhere.
-constant :: forall p r c a. (KnownNat r, KnownNat c) => a -> Raster p r c a
-constant a = Raster $ R.fromFunction sh (const a)
+-- | Create a `Raster` of any size which has the same value everywhere.
+constant :: (KnownNat r, KnownNat c) => a -> Raster p r c a
+constant a = fromFunction (\_ _ -> a)
+
+-- | O(1). Create a `Raster` from a function of its row and column number respectively.
+fromFunction :: forall p r c a. (KnownNat r, KnownNat c) => (Int -> Int -> a) -> Raster p r c a
+fromFunction f = Raster $ R.fromFunction sh (\(Z :. r :. c) -> f r c)
   where sh = R.ix2 (fromInteger $ natVal (Proxy :: Proxy r)) (fromInteger $ natVal (Proxy :: Proxy c))
 
 -- | O(1). Create a `Raster` from the values of an unboxed `U.Vector`.

@@ -5,6 +5,7 @@ module Main where
 import           Codec.Picture
 import           Criterion.Main
 import           Data.Maybe (fromJust)
+import qualified Data.Map.Lazy as M
 import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           Geography.MapAlgebra
@@ -48,8 +49,8 @@ main = defaultMain
       -- , bench "encodeTiff - 256"  $ nf encodeTiff rgba256
       -- , bench "encodeTiff - 1024" $ nf encodeTiff rgba1024
 
-      , bench "rgba - 256"  $ nf (encodePng . rgba) pixels256
-      , bench "rgba - 1024" $ nf (encodePng . rgba) pixels1024
+      , bench "rgba - 256"  $ nf (encodePng . rgba . classify invisible cmap) small
+      , bench "rgba - 1024" $ nf (encodePng . rgba . classify invisible cmap) big
       ]
     ]
     , bgroup "Local Operations"
@@ -58,17 +59,20 @@ main = defaultMain
       ]
   ]
 
-small :: Raster p 256 256 Word8
-small = fromJust . fromList $ replicate (256*256) 1
+small :: Raster p 256 256 Int
+small = fromFunction (*)
 
 smallV :: Raster p 256 256 Word8
 smallV = fromJust . fromUnboxed $ U.replicate (256*256) 1
 
-big :: Raster p 1024 1024 Word8
-big = constant 1 -- fromJust . fromList $ replicate (1024*1024) 1
+big :: Raster p 1024 1024 Int
+big = fromFunction (*)
 
 bigV :: Raster p 1024 1024 Word8
 bigV = fromJust . fromUnboxed $ U.replicate (1024*1024) 1
+
+cmap :: M.Map Int PixelRGBA8
+cmap = greenRed [1, 10, 100, 1000, 10000, 20000, 30000, 40000, 50000, 60000]
 
 pixels256 :: Raster p 256 256 PixelRGBA8
 pixels256 = constant $ PixelRGBA8 125 125 125 maxBound
