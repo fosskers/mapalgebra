@@ -64,3 +64,19 @@
  Since the /shared memory/ approach uses ~computeP~, its performance improves
  as more cores are added. This is the environment we'd be using the library in
  anyway (say, 16 or 32 cores), so the shared memory approach should be used here.
+*** PNG encoding w/ LLVM
+
+/All benchmarks were ran with/ ~RTS+ -N4~
+
+| Trial                     | ~generateImage~ (μs) | 256 (ms) | 1024 (ms) |
+|---------------------------+----------------------+----------+-----------|
+| LLVM - ~traverse~         |                   42 |     8.25 |     143.2 |
+| LLVM - ~unsafeTraverse~   |                   44 |      9.8 |       168 |
+| Native - ~traverse~       |                  110 |    10.77 |     175.6 |
+| Native - ~unsafeTraverse~ |                  112 |    12.81 |     202.7 |
+
+Take aways:
+
+- LLVM is good.
+- ~traverse~ is mysteriously faster, at least for my ~ForeignPtr~ approach to image conversion.
+  Is there a way that would use ~U~? Repa claims that ~U~ is the best for numerical opeartions.
