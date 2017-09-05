@@ -5,6 +5,7 @@ module Main where
 
 import           Codec.Picture
 import qualified Data.Array.Repa as R
+import qualified Data.ByteString as BS
 import           Data.Int
 import qualified Data.Vector.Unboxed as U
 import           Data.Word
@@ -12,18 +13,22 @@ import           Geography.MapAlgebra
 import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
+import qualified Data.List.NonEmpty as NE
 
 ---
 
 main :: IO ()
-main = defaultMain suite
+main = do
+  -- tif <- BS.readFile "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
+  -- defaultMain $ suite tif
+  defaultMain suite
 
 suite :: TestTree
 suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)" $ length small @?= 65536
     , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
-    , testCase "fromImage (256x256)" $ fmap length (fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
+    , testCase "fromImage (256x256)" $ fmap length (NE.head <$> fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assert (small == small)
@@ -57,6 +62,11 @@ suite = testGroup "Unit Tests"
   , testGroup "Repa Behaviour"
     [ testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
     ]
+  -- , testGroup "JuicyPixels Behaviour"
+    -- [ testCase "Initial Image Height" $ (imageHeight <$> i) @?= Just 1753
+    -- , testCase "Initial Image Width"  $ (imageWidth  <$> i) @?= Just 1760
+    -- , testCase "Repa'd Array Size"    $ (R.extent . fromRGBA <$> i) @?= Just (Z :. 1753 :. 1760 :. 4)
+    -- ]
   ]
 
 one :: Raster p 7 7 Int
@@ -77,3 +87,8 @@ arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
 
 img :: Image Pixel8
 img = generateImage (\_ _ -> 5) 256 256
+
+getImage :: BS.ByteString -> Maybe (Image PixelRGBA8)
+getImage bs = either (const Nothing) Just (decodeTiff bs) >>= f
+  where f (ImageRGBA8 i) = Just i
+        f _ = Nothing

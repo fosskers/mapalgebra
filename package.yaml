@@ -19,7 +19,12 @@ ghc-options:
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
   - -Wincomplete-uni-patterns
-  - -O2
+  # These introduce around a 2x speedup.
+  # - -Odph
+  # - -fno-liberate-case
+  # - -funfolding-use-threshold1000
+  # - -funfolding-keeness-factor1000
+  # - -fllvm
 
 dependencies:
   - base >= 4.7 && < 4.11
@@ -32,14 +37,6 @@ dependencies:
 
 library:
   source-dirs:       lib
-# Turn these on for optimizations
-#  ghc-options:
-#    -Odph
-#    -fno-liberate-case
-#    -funfolding-use-threshold1000
-#    -funfolding-keeness-factor1000
-#    -fllvm
-#    -optlo-O3
 
 tests:
   mapalgebra-test:

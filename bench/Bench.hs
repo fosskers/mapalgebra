@@ -49,8 +49,10 @@ main = defaultMain
       -- , bench "encodeTiff - 256"  $ nf encodeTiff rgba256
       -- , bench "encodeTiff - 1024" $ nf encodeTiff rgba1024
 
-      , bench "rgba - 256"  $ nf (encodePng . rgba . classify invisible cmap) small
-      , bench "rgba - 1024" $ nf (encodePng . rgba . classify invisible cmap) big
+      -- , bench "rgba - 256"  $ nf (encodePng . rgba . classify invisible cmap) small
+      -- , bench "rgba - 256 - 2 ops"  $ nf (\r -> encodePng . rgba . classify invisible cmap $ r + r + r) small
+      -- , bench "rgba - 1024" $ nf (encodePng . rgba . classify invisible cmap) big
+      -- , bench "rgba - 1024 - 2 ops"  $ nf (\r -> encodePng . rgba . classify invisible cmap $ r + r + r) big
       ]
     ]
     , bgroup "Local Operations"

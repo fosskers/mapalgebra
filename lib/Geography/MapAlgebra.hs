@@ -30,8 +30,8 @@
 -- `Raster`s (i.e. whether the Rasters properly overlap on the earth) is not
 -- handled in this library and is left to the application.
 --
--- The "colour ramp" generation functions (like `greenRed`) borrow colour sets from Gretchen N. Peterson's
--- book /Cartographer's Toolkit/.
+-- The "colour ramp" generation functions (like `greenRed`) gratefully borrow colour
+-- sets from Gretchen N. Peterson's book /Cartographer's Toolkit/.
 
 {- TODO
 
@@ -158,7 +158,8 @@ import           Data.Foldable
 import           Data.Functor.Identity (runIdentity)
 import           Data.Int
 import qualified Data.List as L
-import           Data.List.NonEmpty (NonEmpty(..), nub)
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Lazy as M
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
@@ -341,22 +342,53 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
--- | O(1). Create a `Raster` from a JuicyPixels image.
--- Will fail if the size of the `Image` does not match the declared size of the `Raster`.
-fromImage :: forall p r c a. (KnownNat r, KnownNat c) => Image Pixel8 -> Maybe (Raster p r c Word8)
-fromImage img
-  | imageWidth img /= c || imageHeight img /= r = Nothing
-  | otherwise = Just . Raster . R.delay . R.fromForeignPtr (R.ix2 r c) . fst . S.unsafeToForeignPtr0 $ imageData img
-  where r = fromInteger $ natVal (Proxy :: Proxy r)
-        c = fromInteger $ natVal (Proxy :: Proxy c)
+-- | O(1). Create a `Raster` from a JuicyPixels image. The result, if successful,
+-- will contain as many Rasters as there were colour channels in the `Image`.
+-- Will fail if the size of the `Image` does not match the declared size of the `Raster`s.
+fromImage :: forall p r c a i. (KnownNat r, KnownNat c, Pixel a) =>
+  Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
+fromImage i = unchannel $ fromBands n i
+  where n = componentCount $ pixelAt i 0 0
 
--- TODO: This need to able to handle more values types than `Word8`.
--- | O(n). Create a `Raster` from a TIFF image.
+-- | O(n). Create up to four `Raster`s from a TIFF image, depending on how many of the RGBA
+-- channels it stores as separate "bands".
 -- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
-fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Raster p r c Word8)
-fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f >>= fromImage
-  where f (ImageY8 img) = Just img
+fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (NonEmpty (Raster p r c Word8))
+fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f
+  where f (ImageY8    img) = unchannel $ fromBands 1 img
+        f (ImageRGB8  img) = unchannel $ fromBands 3 img
+        f (ImageRGBA8 img) = unchannel $ fromBands 4 img
         f _ = Nothing
+
+-- soup :: IO (Maybe (NonEmpty (Raster p 1753 1760 Word8)))
+-- soup = fromTiff <$> BS.readFile "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
+
+{-
+colourIt :: IO ()
+colourIt = do
+  mrs <- soup
+  case mrs of
+    Nothing -> putStrLn "Failed to read the tiff"
+    Just rs -> writePng "/home/colin/code/haskell/mapalgebra/colour-it-up.png" png
+      where png = rgba $ classify invisible (greenRed [1, 25, 50, 75, 100, 125, 150, 175, 200, 225]) avg
+            avg = mean $ NE.map (fmap fromIntegral) rs
+-}
+
+-- | Separate an `R.Array` that contains a colour channel per Z-axis index
+-- into a list of `Raster`s of each channel.
+unchannel :: forall p r c a. (S.Storable a, KnownNat r, KnownNat c) =>
+  R.Array R.F R.DIM3 a -> Maybe (NonEmpty (Raster p r c a))
+unchannel a | ar /= rr || ac /= rc = Nothing
+            | otherwise = Just . NE.fromList $ map rast [0 .. (chans - 1)]
+  where rast n = Raster $ R.traverse a (\(Z :. r :. c :. _) -> R.ix2 r c) (\f (Z :. r :. c) -> f $ R.ix3 r c n)
+        (Z :. ar :. ac :. chans) = R.extent a
+        rr = fromInteger $ natVal (Proxy :: Proxy r)
+        rc = fromInteger $ natVal (Proxy :: Proxy c)
+
+-- | O(1). Basic conversion from JuicyPixels `Image` to a repa `R.Array`.
+-- Can convert any pixel type!
+fromBands :: Pixel p => Int -> Image p -> R.Array R.F R.DIM3 (PixelBaseComponent p)
+fromBands n i = R.fromForeignPtr (R.ix3 (imageHeight i) (imageWidth i) n) . fst . S.unsafeToForeignPtr0 $ imageData i
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: PixelRGBA8
@@ -489,7 +521,7 @@ mean (a :| as) = (/ len) <$> foldl' (+) a as
 
 -- | The count of unique values at each shared index.
 variety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster p r c a) -> Raster p r c Int
-variety = fmap (length . nub) . sequenceA
+variety = fmap (length . NE.nub) . sequenceA
 
 -- | The most frequently appearing value at each shared index.
 majority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster p r c a) -> Raster p r c a
