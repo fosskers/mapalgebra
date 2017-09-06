@@ -19,8 +19,8 @@ ghc-options:
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
   - -Wincomplete-uni-patterns
+  - -Odph
   # These introduce around a 2x speedup.
-  # - -Odph
   # - -fno-liberate-case
   # - -funfolding-use-threshold1000
   # - -funfolding-keeness-factor1000
