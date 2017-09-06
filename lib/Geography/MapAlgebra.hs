@@ -345,6 +345,19 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
 -- | O(1). Create a `Raster` from a JuicyPixels image. The result, if successful,
 -- will contain as many Rasters as there were colour channels in the `Image`.
 -- Will fail if the size of the `Image` does not match the declared size of the `Raster`s.
+--
+-- Example type specifications:
+--
+-- @
+-- Image Pixel8      -> Maybe (NonEmpty (Raster p r c Word8))
+-- Image PixelRGB8   -> Maybe (NonEmpty (Raster p r c Word8))
+-- Image PixelRGBA8  -> Maybe (NonEmpty (Raster p r c Word8))
+-- Image Pixel16     -> Maybe (NonEmpty (Raster p r c Word16))
+-- Image PixelRGB16  -> Maybe (NonEmpty (Raster p r c Word16))
+-- Image PixelRGBA16 -> Maybe (NonEmpty (Raster p r c Word16))
+-- Image PixelF      -> Maybe (NonEmpty (Raster p r c Float))
+-- Image PixelRGBF   -> Maybe (NonEmpty (Raster p r c Float))
+-- @
 fromImage :: forall p r c a i. (KnownNat r, KnownNat c, Pixel a) =>
   Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
 fromImage i = unchannel $ fromBands n i
@@ -352,7 +365,28 @@ fromImage i = unchannel $ fromBands n i
 
 -- | O(n). Create up to four `Raster`s from a TIFF image, depending on how many of the RGBA
 -- channels it stores as separate "bands".
--- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
+-- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`,
+-- or if the TIFF contains values of type other than `Word8`.
+--
+-- ==== __Example__
+--
+-- Read a TIFF from the filesystem and convert it to a `Raster`:
+--
+-- @
+-- import qualified Data.ByteString as BS
+-- import Data.List.NonEmpty ((:|))
+--
+-- raster :: BS.ByteString -> Raster p 256 256 Word8
+-- raster bytes = case fromTiff bytes of
+--   Nothing -> constant 0  -- Reading failed! Return a sad default...
+--   Just (r :| _) -> r     -- Reading successful! Grab the Red channel for some reason.
+--
+-- -- | How many pixels does my Raster have?
+-- main :: IO ()
+-- main = do
+--   r <- fmap raster $ BS.readFile "\/path\/to\/tiff.tif"
+--   putStrLn $ "Raster has " ++ show (length r) ++ " values."
+-- @
 fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (NonEmpty (Raster p r c Word8))
 fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f
   where f (ImageY8    img) = unchannel $ fromBands 1 img
