@@ -423,16 +423,19 @@ type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
 _Byte8 :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Word8))
 _Byte8 f (Byte8 cs) = Byte8 <$> f cs
 _Byte8 _ cs = pure cs
+{-# INLINE _Byte8 #-}
 
 -- | Access `Byte16` channels from a `Channels`, if possible.
 _Byte16 :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Word16))
 _Byte16 f (Byte16 cs) = Byte16 <$> f cs
 _Byte16 _ cs = pure cs
+{-# INLINE _Byte16 #-}
 
 -- | Access `Floating` channels from a `Channels`, if possible.
 _Floating :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Float))
 _Floating f (Floating cs) = Floating <$> f cs
 _Floating _ cs = pure cs
+{-# INLINE _Floating #-}
 
 -- | Separate an `R.Array` that contains a colour channel per Z-axis index
 -- into a list of `Raster`s of each channel.
