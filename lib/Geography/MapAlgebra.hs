@@ -44,8 +44,9 @@ module Geography.MapAlgebra
   -- * Types
   -- ** Rasters
     Raster(..)
+  , Channels(..)
   -- *** Creation
-  , constant, fromFunction, fromUnboxed, fromList, fromImage, fromTiff
+  , constant, fromFunction, fromUnboxed, fromList, fromImage, fromDynamic, fromTiff
   -- , fromPng, fromTiff
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
@@ -387,26 +388,26 @@ fromImage i = unchannel $ fromBands n i
 --   r <- fmap raster $ BS.readFile "\/path\/to\/tiff.tif"
 --   putStrLn $ "Raster has " ++ show (length r) ++ " values."
 -- @
-fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (NonEmpty (Raster p r c Word8))
-fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= f
-  where f (ImageY8    img) = unchannel $ fromBands 1 img
-        f (ImageRGB8  img) = unchannel $ fromBands 3 img
-        f (ImageRGBA8 img) = unchannel $ fromBands 4 img
-        f _ = Nothing
+fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Channels p r c)
+fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= fromDynamic
 
--- soup :: IO (Maybe (NonEmpty (Raster p 1753 1760 Word8)))
--- soup = fromTiff <$> BS.readFile "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
+-- | O(1). Convert a JuicyPixels `DynamicImage` into its `Channels`.
+fromDynamic :: forall p r c. (KnownNat r, KnownNat c) => DynamicImage -> Maybe (Channels p r c)
+fromDynamic (ImageY8     img) = Byte8    <$> fromImage img
+fromDynamic (ImageRGB8   img) = Byte8    <$> fromImage img
+fromDynamic (ImageRGBA8  img) = Byte8    <$> fromImage img
+fromDynamic (ImageRGB16  img) = Byte16   <$> fromImage img
+fromDynamic (ImageRGBA16 img) = Byte16   <$> fromImage img
+fromDynamic (ImageYF     img) = Floating <$> fromImage img
+fromDynamic (ImageRGBF   img) = Floating <$> fromImage img
+fromDynamic _                 = Nothing
 
-{-
-colourIt :: IO ()
-colourIt = do
-  mrs <- soup
-  case mrs of
-    Nothing -> putStrLn "Failed to read the tiff"
-    Just rs -> writePng "/home/colin/code/haskell/mapalgebra/colour-it-up.png" png
-      where png = rgba $ classify invisible (greenRed [1, 25, 50, 75, 100, 125, 150, 175, 200, 225]) avg
-            avg = mean $ NE.map (fmap fromIntegral) rs
--}
+-- | A sum type to distinguish between pixel types that can come out of
+-- JuicyPixels images.
+data Channels p r c = Byte8    (NonEmpty (Raster p r c Word8))
+                    | Byte16   (NonEmpty (Raster p r c Word16))
+                    | Floating (NonEmpty (Raster p r c Float))
+                    deriving (Eq, Show)
 
 -- | Separate an `R.Array` that contains a colour channel per Z-axis index
 -- into a list of `Raster`s of each channel.
