@@ -369,8 +369,7 @@ fromImage i = unchannel $ fromBands n i
 
 -- | O(n). Create up to four `Raster`s from a TIFF image, depending on how many of the RGBA
 -- channels it stores as separate "bands".
--- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`,
--- or if the TIFF contains values of type other than `Word8`.
+-- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
 --
 -- ==== __Example__
 --
@@ -378,18 +377,23 @@ fromImage i = unchannel $ fromBands n i
 --
 -- @
 -- import qualified Data.ByteString as BS
--- import Data.List.NonEmpty ((:|))
+-- import           Data.List.NonEmpty ((:|))
+-- import qualified Data.List.NonEmpty as NE
+-- import           Lens.Micro  -- from `microlens`
 --
+-- -- Fails if the TIFF didn't decode, or if it contained a pixel type
+-- -- that you weren't expecting. If successful, it grabs the first
+-- -- band it can find.
 -- raster :: BS.ByteString -> Maybe (Raster p 256 256 Word8)
--- raster bytes = case fromTiff bytes of
---   Just (Byte8 (r :| _)) -> Just r  -- Reading successful! Grab the Red channel for some reason.
---   _ -> Nothing
+-- raster bytes = fromTiff bytes ^? _Byte8 . to NE.head
 --
--- -- | How many pixels does my Raster have?
+-- -- How many pixels does my Raster have?
 -- main :: IO ()
 -- main = do
---   r <- fmap raster $ BS.readFile "\/path\/to\/tiff.tif"
---   putStrLn $ "Raster has " ++ show (length r) ++ " values."
+--   mr <- fmap raster $ BS.readFile "\/path\/to\/tiff.tif"
+--   case mr of
+--     Nothing -> putStrLn "Darn."
+--     Just r  -> putStrLn $ "Raster has " ++ show (length r) ++ " values."
 -- @
 fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Channels p r c)
 fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= fromDynamic
