@@ -362,7 +362,7 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
 -- Image PixelF      -> Maybe (NonEmpty (Raster p r c Float))
 -- Image PixelRGBF   -> Maybe (NonEmpty (Raster p r c Float))
 -- @
-fromImage :: forall p r c a i. (KnownNat r, KnownNat c, Pixel a) =>
+fromImage :: forall p r c a. (KnownNat r, KnownNat c, Pixel a) =>
   Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
 fromImage i = unchannel $ fromBands n i
   where n = componentCount $ pixelAt i 0 0
@@ -377,7 +377,6 @@ fromImage i = unchannel $ fromBands n i
 --
 -- @
 -- import qualified Data.ByteString as BS
--- import           Data.List.NonEmpty ((:|))
 -- import qualified Data.List.NonEmpty as NE
 -- import           Lens.Micro  -- from `microlens`
 --
@@ -390,12 +389,12 @@ fromImage i = unchannel $ fromBands n i
 -- -- How many pixels does my Raster have?
 -- main :: IO ()
 -- main = do
---   mr <- fmap raster $ BS.readFile "\/path\/to\/tiff.tif"
+--   mr <- raster \<$\> BS.readFile "\/path\/to\/tiff.tif"
 --   case mr of
 --     Nothing -> putStrLn "Darn."
 --     Just r  -> putStrLn $ "Raster has " ++ show (length r) ++ " values."
 -- @
-fromTiff :: forall p r c a. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Channels p r c)
+fromTiff :: forall p r c. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Channels p r c)
 fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= fromDynamic
 
 -- | O(1). Convert a JuicyPixels `DynamicImage` into its `Channels`.
