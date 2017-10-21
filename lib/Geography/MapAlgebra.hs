@@ -45,12 +45,10 @@ module Geography.MapAlgebra
   -- * Types
   -- ** Rasters
     Raster(..)
-  , Channels(..)
   , Traversal'
-  , _Byte8, _Byte16, _Floating
+  , _Word8
   -- *** Creation
-  , constant, fromFunction, fromUnboxed, fromList, fromImage, fromDynamic, fromTiff
-  -- , fromPng, fromTiff
+  , constant, fromFunction, fromUnboxed, fromList, fromImage, tiff
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
   -- transformed into an `Image` by `rgba`.
@@ -158,6 +156,7 @@ import qualified Data.Array.Repa.Stencil.Dim2 as R
 import           Data.Bits
 import           Data.Bits.Floating
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
 import           Data.Foldable
 import           Data.Functor.Identity (runIdentity)
 import           Data.Int
@@ -367,9 +366,10 @@ fromImage :: forall p r c a. (KnownNat r, KnownNat c, Pixel a) =>
 fromImage i = unchannel $ fromBands n i
   where n = componentCount $ pixelAt i 0 0
 
--- | O(n). Create up to four `Raster`s from a TIFF image, depending on how many of the RGBA
--- channels it stores as separate "bands".
--- Will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
+-- | Simple Traversals compatible with both lens and microlens.
+type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
+
+-- | O(n). A simple Traversal for decoding/encoding ByteStrings as TIFFs.
 --
 -- ==== __Example__
 --
@@ -384,7 +384,7 @@ fromImage i = unchannel $ fromBands n i
 -- -- that you weren't expecting. If successful, it grabs the first
 -- -- band it can find.
 -- raster :: BS.ByteString -> Maybe (Raster p 256 256 Word8)
--- raster bytes = fromTiff bytes ^? _Byte8 . to NE.head
+-- raster bytes = bytes ^? tiff . _Word8 . to NE.head
 --
 -- -- How many pixels does my Raster have?
 -- main :: IO ()
@@ -394,47 +394,31 @@ fromImage i = unchannel $ fromBands n i
 --     Nothing -> putStrLn "Darn."
 --     Just r  -> putStrLn $ "Raster has " ++ show (length r) ++ " values."
 -- @
-fromTiff :: forall p r c. (KnownNat r, KnownNat c) => BS.ByteString -> Maybe (Channels p r c)
-fromTiff bs = either (const Nothing) Just (decodeTiff bs) >>= fromDynamic
+tiff :: Traversal' BS.ByteString DynamicImage
+tiff f bs = either (const $ pure bs) (\dn -> maybe bs id . dynamic <$> f dn) $ decodeTiff bs
+  where dynamic (ImageY8 i)     = Just . BL.toStrict $ encodeTiff i
+        dynamic (ImageY16 i)    = Just . BL.toStrict $ encodeTiff i
+        dynamic (ImageRGB8 i)   = Just . BL.toStrict $ encodeTiff i
+        dynamic (ImageRGB16 i)  = Just . BL.toStrict $ encodeTiff i
+        dynamic (ImageRGBA8 i)  = Just . BL.toStrict $ encodeTiff i
+        dynamic (ImageRGBA16 i) = Just . BL.toStrict $ encodeTiff i
+        dynamic _               = Nothing
+{-# INLINE tiff #-}
 
--- | O(1). Convert a JuicyPixels `DynamicImage` into its `Channels`.
-fromDynamic :: forall p r c. (KnownNat r, KnownNat c) => DynamicImage -> Maybe (Channels p r c)
-fromDynamic (ImageY8     img) = Byte8    <$> fromImage img
-fromDynamic (ImageRGB8   img) = Byte8    <$> fromImage img
-fromDynamic (ImageRGBA8  img) = Byte8    <$> fromImage img
-fromDynamic (ImageRGB16  img) = Byte16   <$> fromImage img
-fromDynamic (ImageRGBA16 img) = Byte16   <$> fromImage img
-fromDynamic (ImageYF     img) = Floating <$> fromImage img
-fromDynamic (ImageRGBF   img) = Floating <$> fromImage img
-fromDynamic _                 = Nothing
+-- The underlying `Image` type may change. If the user does:
+--     dn & byte .~ rs
+-- where @rs@ is some `NonEmpty` of arbitrary length, then the `DynamicImage`
+-- that started as a `ImageY8` couldn't possible end as one. Does this violate
+-- any Traversal laws?
 
--- | A sum type to distinguish between pixel types that can come out of
--- JuicyPixels images.
-data Channels p r c = Byte8    (NonEmpty (Raster p r c Word8))
-                    | Byte16   (NonEmpty (Raster p r c Word16))
-                    | Floating (NonEmpty (Raster p r c Float))
-                    deriving (Eq, Show)
-
--- | Simple Traversals compatible with both lens and microlens.
-type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
-
--- | Access `Byte8` channels from a `Channels`, if possible.
-_Byte8 :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Word8))
-_Byte8 f (Byte8 cs) = Byte8 <$> f cs
-_Byte8 _ cs = pure cs
-{-# INLINE _Byte8 #-}
-
--- | Access `Byte16` channels from a `Channels`, if possible.
-_Byte16 :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Word16))
-_Byte16 f (Byte16 cs) = Byte16 <$> f cs
-_Byte16 _ cs = pure cs
-{-# INLINE _Byte16 #-}
-
--- | Access `Floating` channels from a `Channels`, if possible.
-_Floating :: Traversal' (Channels p r c) (NonEmpty (Raster p r c Float))
-_Floating f (Floating cs) = Floating <$> f cs
-_Floating _ cs = pure cs
-{-# INLINE _Floating #-}
+-- | O(1) to get. O(n) to set, where @n@ is the size of each Raster.
+-- Getting will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
+_Word8 :: (KnownNat r, KnownNat c) => Traversal' DynamicImage (NonEmpty (Raster p r c Word8))
+_Word8 f di@(ImageY8    i) = maybe (pure di) (\rs -> ImageY8 . grayscale . NE.head <$> f rs) $ fromImage i
+_Word8 f di@(ImageRGB8  i) = maybe (pure di) (\rs -> ImageRGB8 . convertRGB8 . ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
+_Word8 f di@(ImageRGBA8 i) = maybe (pure di) (\rs -> ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
+_Word8 _ i                 = pure i
+{-# INLINE _Word8 #-}
 
 -- | Separate an `R.Array` that contains a colour channel per Z-axis index
 -- into a list of `Raster`s of each channel.
@@ -559,6 +543,9 @@ toRGBA a = R.traverse a (\(Z :. r :. c) -> Z :. r :. c :. 4) f
         f g (Z :. r :. c :. 1) = (\(PixelRGBA8 _ w _ _) -> w) $ g (Z :. r :. c)
         f g (Z :. r :. c :. 2) = (\(PixelRGBA8 _ _ w _) -> w) $ g (Z :. r :. c)
         f g (Z :. r :. c :. _) = (\(PixelRGBA8 _ _ _ w) -> w) $ g (Z :. r :. c)
+
+crushBands :: NonEmpty (Raster p r c Word8) -> Raster p r c PixelRGBA8
+crushBands = undefined
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
