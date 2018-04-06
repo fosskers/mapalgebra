@@ -1,10 +1,10 @@
 {-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE DataKinds, KindSignatures, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
--- Copyright : (c) Colin Woodbury, 2017
+-- Copyright : (c) Colin Woodbury, 2018
 -- License   : BSD3
 -- Maintainer: Colin Woodbury <colingw@gmail.com>
 --
@@ -24,7 +24,7 @@
 --
 -- * Single-Raster /Local Operations/ -> `fmap` with pure functions
 -- * Multi-Raster /Local Operations/ -> `foldl` with `zipWith` and pure functions
--- * /Focal Operations/ -> Called /convolution/ elsewhere; 'repa' has support for this (described below)
+-- * /Focal Operations/ -> Called /convolution/ elsewhere; 'massiv' has support for this (described below)
 -- * /Zonal Operations/ -> ??? TODO
 --
 -- Whether it is meaningful to perform operations between two given
@@ -46,9 +46,9 @@ module Geography.MapAlgebra
   -- ** Rasters
     Raster(..)
   , Traversal'
-  , _Word8
+  -- , _Word8
   -- *** Creation
-  , constant, fromFunction, fromUnboxed, fromList, fromImage, tiff
+  , constant, fromFunction, fromVector, tiff
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
   -- transformed into an `Image` by `rgba`.
@@ -75,7 +75,7 @@ module Geography.MapAlgebra
   --
   -- writePng "foo.png" $ grayscale rast
   -- @
-  , grayscale, rgba
+  -- , grayscale, rgba
   , encodePng, encodeTiff
   , writePng, writeTiff
   -- ** Projections
@@ -127,7 +127,7 @@ module Geography.MapAlgebra
   -- `Raster`s. You would likely want @foldl1'@ which is provided by both List
   -- and Vector. Keep in mind that `Raster` has a `Num` instance, so you can use
   -- all the normal math operators with them as well.
-  , min, max
+  , lmin, lmax
   -- *** Other
   -- | There is no binary form of these functions that exists without
   -- producing numerical error,  so you can't use the `foldl` family with these.
@@ -135,10 +135,9 @@ module Geography.MapAlgebra
   -- \[
   --    \forall abc \in \mathbb{R}. \frac{\frac{a + b}{2} + c}{2} = \frac{a + b + c}{3}
   -- \]
-  , mean, variety, majority, minority, variance
+  , lmean, lvariety, lmajority, lminority, lvariance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
-  , Focal(..)
   , fsum, fmean
   , fmax, fmin
   , fmajority, fminority, fvariety
@@ -146,28 +145,23 @@ module Geography.MapAlgebra
   ) where
 
 import           Codec.Picture
-import           Data.Array.Repa ((:.)(..), Z(..))
-import qualified Data.Array.Repa as R
-import qualified Data.Array.Repa.Repr.ForeignPtr as R
-import qualified Data.Array.Repa.Repr.Vector as R
-import qualified Data.Array.Repa.Stencil as R
-import           Data.Array.Repa.Stencil.Dim2 (makeStencil2)
-import qualified Data.Array.Repa.Stencil.Dim2 as R
-import           Data.Bits
-import           Data.Bits.Floating
+import           Control.DeepSeq (NFData)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
+import           Data.Default (Default)
 import           Data.Foldable
-import           Data.Functor.Identity (runIdentity)
 import           Data.Int
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Lazy as M
+import qualified Data.Massiv.Array as A
+import           Data.Massiv.Array hiding (zipWith)
+import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
-import qualified Data.Vector.Storable as S
-import qualified Data.Vector.Unboxed as U
+import           Data.Typeable (Typeable)
+import qualified Data.Vector.Generic as GV
 import           Data.Word
 import           GHC.TypeLits
 import qualified Prelude as P
@@ -176,7 +170,7 @@ import           Prelude hiding (div, min, max, zipWith)
 --
 
 -- | A location on the Earth in some `Projection`.
-data Point p a = Point { x :: a, y :: a } deriving (Eq, Show)
+data Point p = Point { x :: !Double, y :: !Double } deriving (Eq, Show)
 
 -- | The Earth is not a sphere. Various schemes have been invented
 -- throughout history that provide `Point` coordinates for locations on the
@@ -190,14 +184,15 @@ data Point p a = Point { x :: a, y :: a } deriving (Eq, Show)
 -- Use `reproject` to convert `Point`s between various Projections.
 class Projection p where
   -- | Convert a `Point` in this Projection to one of radians on a perfect `Sphere`.
-  toSphere :: Point p Double -> Point Sphere Double
+  toSphere :: Point p -> Point Sphere
 
   -- | Convert a `Point` of radians on a perfect sphere to that of a specific Projection.
-  fromSphere :: Point Sphere Double -> Point p Double
+  fromSphere :: Point Sphere -> Point p
 
 -- | Reproject a `Point` from one `Projection` to another.
-reproject :: (Projection p, Projection r) => Point p Double -> Point r Double
+reproject :: (Projection p, Projection r) => Point p -> Point r
 reproject = fromSphere . toSphere
+{-# INLINE reproject #-}
 
 -- | A perfect geometric sphere. The earth isn't actually shaped this way,
 -- but it's a convenient middle-ground for converting between various
@@ -223,6 +218,7 @@ instance Projection WebMercator where
 
 -- | A rectangular grid of data representing some area on the earth.
 --
+-- * @u@: What is the /underlying representation/ of this Raster? (see 'massiv')
 -- * @p@: What `Projection` is this Raster in?
 -- * @r@: How many rows does this Raster have?
 -- * @c@: How many columns does this Raster have?
@@ -242,11 +238,9 @@ instance Projection WebMercator where
 -- >>> length myRaster
 -- 65536
 -- @
-newtype Raster p (r :: Nat) (c :: Nat) a = Raster { _array :: R.Array R.D R.DIM2 a }
+newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
--- TODO Might be able to do this sexier with Text.Printf.
--- | Renders the first 10x10 values in your Raster.
--- Be careful - this will evaluate your lazy Raster. For debugging purposes only!
+{-
 instance Show a => Show (Raster p r c a) where
   show (Raster a) = ('\n' :) . unlines . map unwords $ groupsOf cols padded
     where (Z :. r :. c) = R.extent a
@@ -256,42 +250,67 @@ instance Show a => Show (Raster p r c a) where
           list = map show $ R.toList window
           longest = maximum $ map length list
           padded = map (padTo longest) list
+-}
 
 -- | Pad whitespace to the front of a String so that it has a given length.
-padTo :: Int -> String -> String
-padTo n s = ((n - length s) `stimes` " ") ++ s
+-- padTo :: Int -> String -> String
+-- padTo n s = ((n - length s) `stimes` " ") ++ s
 
 -- | I wish this were in the Prelude.
-groupsOf :: Int -> [a] -> [[a]]
-groupsOf _ [] = []
-groupsOf n as = g : groupsOf n rest
-  where (g,rest) = splitAt n as
+-- groupsOf :: Int -> [a] -> [[a]]
+-- groupsOf _ [] = []
+-- groupsOf n as = g : groupsOf n rest
+--   where (g,rest) = splitAt n as
 
-instance Functor (Raster p r c) where
-  fmap f (Raster a) = Raster $ R.map f a
+instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
+instance (Eq a, Storable a) => Eq (Raster S p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
+instance (Eq a, Prim a) => Eq (Raster P p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
+instance (Eq a, NFData a) => Eq (Raster N p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
+instance Eq a => Eq (Raster B p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
+instance Functor (Raster DW p r c) where
+  fmap f (Raster a) = Raster $ fmap f a
   {-# INLINE fmap #-}
 
-instance (KnownNat r, KnownNat c) => Applicative (Raster p r c) where
-  pure = constant
+instance Functor (Raster D p r c) where
+  fmap f (Raster a) = Raster $ fmap f a
+  {-# INLINE fmap #-}
+
+instance Functor (Raster DI p r c) where
+  fmap f (Raster a) = Raster $ fmap f a
+  {-# INLINE fmap #-}
+
+instance (KnownNat r, KnownNat c) => Applicative (Raster D p r c) where
+  pure = constant D Par
   {-# INLINE pure #-}
 
   -- TODO: Use strict ($)?
   fs <*> as = zipWith ($) fs as
   {-# INLINE (<*>) #-}
 
--- | Be careful - this will evaluate your lazy Raster.
-instance Eq a => Eq (Raster p r c a) where
-  (Raster a) == (Raster b) = runIdentity $ R.equalsP a b
-  {-# INLINE (==) #-}
-
-instance (Monoid a, KnownNat r, KnownNat c) => Monoid (Raster p r c a) where
-  mempty = constant mempty
+-- TODO: Semigroup
+instance (Monoid a, KnownNat r, KnownNat c) => Monoid (Raster D p r c a) where
+  mempty = constant D Par mempty
   {-# INLINE mempty #-}
 
   a `mappend` b = zipWith mappend a b
   {-# INLINE mappend #-}
 
-instance (Num a, KnownNat r, KnownNat c) => Num (Raster p r c a) where
+instance (Num a, KnownNat r, KnownNat c) => Num (Raster D p r c a) where
   a + b = zipWith (+) a b
   {-# INLINE (+) #-}
 
@@ -303,7 +322,8 @@ instance (Num a, KnownNat r, KnownNat c) => Num (Raster p r c a) where
 
   abs = fmap abs
   signum = fmap signum
-  fromInteger = constant . fromInteger
+  fromInteger = constant D Par . fromInteger
+{-
 
 instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster p r c a) where
   a / b = zipWith (/) a b
@@ -318,30 +338,24 @@ instance Foldable (Raster p r c) where
   sum (Raster a) = R.sumAllS a
   -- | O(1).
   length (Raster a) = R.size $ R.extent a
+-}
 
 -- | Create a `Raster` of any size which has the same value everywhere.
-constant :: (KnownNat r, KnownNat c) => a -> Raster p r c a
-constant a = fromFunction (\_ _ -> a)
+constant :: (KnownNat r, KnownNat c, Construct u Ix2 a) => u -> Comp -> a -> Raster u p r c a
+constant u c a = fromFunction u c (const a)
 
 -- | O(1). Create a `Raster` from a function of its row and column number respectively.
-fromFunction :: forall p r c a. (KnownNat r, KnownNat c) => (Int -> Int -> a) -> Raster p r c a
-fromFunction f = Raster $ R.fromFunction sh (\(Z :. r :. c) -> f r c)
-  where sh = R.ix2 (fromInteger $ natVal (Proxy :: Proxy r)) (fromInteger $ natVal (Proxy :: Proxy c))
+fromFunction :: forall u p r c a. (KnownNat r, KnownNat c, Construct u Ix2 a) =>
+  u -> Comp -> (Ix2 -> a) -> Raster u p r c a
+fromFunction u c f = Raster $ makeArrayR u c sh f
+  where sh = fromInteger (natVal (Proxy :: Proxy r)) :. fromInteger (natVal (Proxy :: Proxy c))
 
--- | O(1). Create a `Raster` from the values of an unboxed `U.Vector`.
+-- | O(1). Create a `Raster` from the values of any `GV.Vector` type.
 -- Will fail if the size of the Vector does not match the declared size of the `Raster`.
-fromUnboxed :: forall p r c a. (KnownNat r, KnownNat c, U.Unbox a) => U.Vector a -> Maybe (Raster p r c a)
-fromUnboxed v | (r * c) == U.length v = Just . Raster . R.delay $ R.fromUnboxed (R.ix2 r c) v
-              | otherwise = Nothing
-  where r = fromInteger $ natVal (Proxy :: Proxy r)
-        c = fromInteger $ natVal (Proxy :: Proxy c)
-
--- | O(n). Create a `Raster` from a list of anything. Will fail if the size of the list
--- does not match the declared size of the `Raster`. In general, should be used for
--- debugging only.
-fromList :: forall p r c a. (KnownNat r, KnownNat c) => [a] -> Maybe (Raster p r c a)
-fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R.ix2 r c) l
-           | otherwise = Nothing
+fromVector :: forall v p r c a. (KnownNat r, KnownNat c, GV.Vector v a, Mutable (A.ARepr v) Ix2 a, Typeable v) =>
+  Comp -> v a -> Maybe (Raster (A.ARepr v) p r c a)
+fromVector comp v | (r * c) == GV.length v = Just . Raster $ A.fromVector comp (r :. c) v
+                  | otherwise = Nothing
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
@@ -361,10 +375,10 @@ fromList l | (r * c) == length l = Just . Raster . R.delay $ R.fromListVector (R
 -- Image PixelF      -> Maybe (NonEmpty (Raster p r c Float))
 -- Image PixelRGBF   -> Maybe (NonEmpty (Raster p r c Float))
 -- @
-fromImage :: forall p r c a. (KnownNat r, KnownNat c, Pixel a) =>
-  Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
-fromImage i = unchannel $ fromBands n i
-  where n = componentCount $ pixelAt i 0 0
+-- fromImage :: forall p r c a. (KnownNat r, KnownNat c, Pixel a) =>
+--   Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
+-- fromImage i = unchannel $ fromBands n i
+--   where n = componentCount $ pixelAt i 0 0
 
 -- | Simple Traversals compatible with both lens and microlens.
 type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
@@ -413,15 +427,16 @@ tiff f bs = either (const $ pure bs) (\dn -> maybe bs id . dynamic <$> f dn) $ d
 
 -- | O(1) to get. O(n) to set, where @n@ is the size of each Raster.
 -- Getting will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
-_Word8 :: (KnownNat r, KnownNat c) => Traversal' DynamicImage (NonEmpty (Raster p r c Word8))
-_Word8 f di@(ImageY8    i) = maybe (pure di) (\rs -> ImageY8 . grayscale . NE.head <$> f rs) $ fromImage i
-_Word8 f di@(ImageRGB8  i) = maybe (pure di) (\rs -> ImageRGB8 . convertRGB8 . ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
-_Word8 f di@(ImageRGBA8 i) = maybe (pure di) (\rs -> ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
-_Word8 _ i                 = pure i
-{-# INLINE _Word8 #-}
+-- _Word8 :: (KnownNat r, KnownNat c) => Traversal' DynamicImage (NonEmpty (Raster p r c Word8))
+-- _Word8 f di@(ImageY8    i) = maybe (pure di) (\rs -> ImageY8 . grayscale . NE.head <$> f rs) $ fromImage i
+-- _Word8 f di@(ImageRGB8  i) = maybe (pure di) (\rs -> ImageRGB8 . convertRGB8 . ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
+-- _Word8 f di@(ImageRGBA8 i) = maybe (pure di) (\rs -> ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
+-- _Word8 _ i                 = pure i
+-- {-# INLINE _Word8 #-}
 
 -- | Separate an `R.Array` that contains a colour channel per Z-axis index
 -- into a list of `Raster`s of each channel.
+{-
 unchannel :: forall p r c a. (S.Storable a, KnownNat r, KnownNat c) =>
   R.Array R.F R.DIM3 a -> Maybe (NonEmpty (Raster p r c a))
 unchannel a | ar /= rr || ac /= rc = Nothing
@@ -430,11 +445,12 @@ unchannel a | ar /= rr || ac /= rc = Nothing
         (Z :. ar :. ac :. chans) = R.extent a
         rr = fromInteger $ natVal (Proxy :: Proxy r)
         rc = fromInteger $ natVal (Proxy :: Proxy c)
+-}
 
 -- | O(1). Basic conversion from JuicyPixels `Image` to a repa `R.Array`.
 -- Can convert any pixel type!
-fromBands :: Pixel p => Int -> Image p -> R.Array R.F R.DIM3 (PixelBaseComponent p)
-fromBands n i = R.fromForeignPtr (R.ix3 (imageHeight i) (imageWidth i) n) . fst . S.unsafeToForeignPtr0 $ imageData i
+-- fromBands :: Pixel p => Int -> Image p -> R.Array R.F R.DIM3 (PixelBaseComponent p)
+-- fromBands n i = R.fromForeignPtr (R.ix3 (imageHeight i) (imageWidth i) n) . fst . S.unsafeToForeignPtr0 $ imageData i
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: PixelRGBA8
@@ -442,7 +458,7 @@ invisible = PixelRGBA8 0 0 0 0
 
 -- | Construct a colour ramp.
 ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k PixelRGBA8
-ramp colours breaks = M.fromList . zip breaks $ map (\(r,g,b) -> PixelRGBA8 r g b maxBound) colours
+ramp colours breaks = M.fromList . P.zip breaks $ P.map (\(r,g,b) -> PixelRGBA8 r g b maxBound) colours
 
 -- | From page 32 of /Cartographer's Toolkit/.
 greenRed :: Ord k => [k] -> M.Map k PixelRGBA8
@@ -524,57 +540,68 @@ blue w = PixelRGBA8 0 0 w maxBound
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
 -- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"
 -- the more cores you add (say, @+RTS -N4@).
-grayscale :: Raster p r c Word8 -> Image Pixel8
-grayscale (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w)
-  where (Z :. h :. w) = R.extent arr
-        arr = runIdentity $ R.computeP a
+-- grayscale :: Raster p r c Word8 -> Image Pixel8
+-- grayscale (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w)
+--   where (Z :. h :. w) = R.extent arr
+--         arr = runIdentity $ R.computeP a
 
 -- | O(k + 1). Transform a `Raster` of pixels into a generic `Image`, ready
 -- for further encoding into a PNG or TIFF. The same conditions as `grayscale` apply.
-rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
-rgba (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w*z)
-  where (Z :. h :. w :. z) = R.extent arr
-        arr = runIdentity . R.computeP $ toRGBA a
+-- rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
+-- rgba (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w*z)
+--   where (Z :. h :. w :. z) = R.extent arr
+--         arr = runIdentity . R.computeP $ toRGBA a
 
 -- | Expand a `Raster`'s inner Array into a format that JuicyPixels will like better.
-toRGBA :: R.Array R.D R.DIM2 PixelRGBA8 -> R.Array R.D R.DIM3 Word8
-toRGBA a = R.traverse a (\(Z :. r :. c) -> Z :. r :. c :. 4) f
-  where f g (Z :. r :. c :. 0) = (\(PixelRGBA8 w _ _ _) -> w) $ g (Z :. r :. c)
-        f g (Z :. r :. c :. 1) = (\(PixelRGBA8 _ w _ _) -> w) $ g (Z :. r :. c)
-        f g (Z :. r :. c :. 2) = (\(PixelRGBA8 _ _ w _) -> w) $ g (Z :. r :. c)
-        f g (Z :. r :. c :. _) = (\(PixelRGBA8 _ _ _ w) -> w) $ g (Z :. r :. c)
+-- toRGBA :: R.Array R.D R.DIM2 PixelRGBA8 -> R.Array R.D R.DIM3 Word8
+-- toRGBA a = R.traverse a (\(Z :. r :. c) -> Z :. r :. c :. 4) f
+--   where f g (Z :. r :. c :. 0) = (\(PixelRGBA8 w _ _ _) -> w) $ g (Z :. r :. c)
+--         f g (Z :. r :. c :. 1) = (\(PixelRGBA8 _ w _ _) -> w) $ g (Z :. r :. c)
+--         f g (Z :. r :. c :. 2) = (\(PixelRGBA8 _ _ w _) -> w) $ g (Z :. r :. c)
+--         f g (Z :. r :. c :. _) = (\(PixelRGBA8 _ _ _ w) -> w) $ g (Z :. r :. c)
 
-crushBands :: NonEmpty (Raster p r c Word8) -> Raster p r c PixelRGBA8
-crushBands = undefined
+-- crushBands :: NonEmpty (Raster p r c Word8) -> Raster p r c PixelRGBA8
+-- crushBands = undefined
+
+-- TODO But the number of bands is not known ahead of time, so the `a` won't be a single,
+-- known type. Yeah, the type family goes in the opposite direction. Some `Pixel a` knows
+-- what its base component is, but each base component type could have many `Pixel a`
+-- that use it. i.e. a `Word8` base component tells you nothing about how many channels
+-- the pixel has.
+--
+-- So do I need a dependently-typed `NonEmpty` that knows its length? Then it could
+-- form a new type family with the various Pixel types.
+-- crooshBands :: Pixel a => NonEmpty (Raster p r c (PixelBaseComponent a)) -> Raster p r c a
+-- crooshBands = undefined
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
 --
 -- This is a glorified `fmap` operation, but we expose it for convenience.
-classify :: Ord a => b -> M.Map a b -> Raster p r c a -> Raster p r c b
+classify :: Ord a => b -> M.Map a b -> Raster D p r c a -> Raster D p r c b
 classify def m r = fmap f r
   where f a = maybe def snd $ M.lookupLE a m
 
 -- | Finds the minimum value at each index between two `Raster`s.
-min :: Ord a => Raster p r c a -> Raster p r c a -> Raster p r c a
-min (Raster a) (Raster b) = Raster $ R.zipWith P.min a b
+lmin :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
+lmin a b = zipWith P.min a b
 
 -- | Finds the maximum value at each index between two `Raster`s.
-max :: Ord a => Raster p r c a -> Raster p r c a -> Raster p r c a
-max (Raster a) (Raster b) = Raster $ R.zipWith P.max a b
+lmax :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
+lmax a b = zipWith P.max a b
 
 -- | Averages the values per-index of all `Raster`s in a collection.
-mean :: (Fractional a, KnownNat r, KnownNat c) => NonEmpty (Raster p r c a) -> Raster p r c a
-mean (a :| as) = (/ len) <$> foldl' (+) a as
+lmean :: (Fractional a, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c a
+lmean (a :| as) = (/ len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
-variety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster p r c a) -> Raster p r c Int
-variety = fmap (length . NE.nub) . sequenceA
+lvariety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster D p r c a) -> Raster D p r c Int
+lvariety = fmap (length . NE.nub) . sequenceA
 
 -- | The most frequently appearing value at each shared index.
-majority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster p r c a) -> Raster p r c a
-majority = fmap majo . sequenceA
+lmajority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
+lmajority = fmap majo . sequenceA
 
 -- | Find the most common value in some `Foldable`.
 majo :: (Foldable t, Ord a) => t a -> a
@@ -584,8 +611,8 @@ majo = fst . g . f
 {-# INLINE majo #-}
 
 -- | The least frequently appearing value at each shared index.
-minority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster p r c a) -> Raster p r c a
-minority = fmap mino . sequenceA
+lminority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
+lminority = fmap mino . sequenceA
 
 -- | Find the least common value in some `Foldable`.
 mino :: (Foldable t, Ord a) => t a -> a
@@ -596,11 +623,11 @@ mino = fst . g . f
 
 -- | A measure of how spread out a dataset is. This calculation will fail
 -- with `Nothing` if a length 1 list is given.
-variance :: (KnownNat r, KnownNat c, Fractional a) => NonEmpty (Raster p r c a) -> Maybe (Raster p r c a)
-variance (_ :| []) = Nothing
-variance rs = Just (f <$> sequenceA rs)
+lvariance :: (KnownNat r, KnownNat c, Fractional a) => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c a)
+lvariance (_ :| []) = Nothing
+lvariance rs = Just (f <$> sequenceA rs)
   where len = fromIntegral $ length rs
-        avg ns = (/ len) $ sum ns
+        avg ns = (/ len) $ P.sum ns  -- TODO: Use foldl'
         f os@(n :| ns) = foldl' (\acc m -> acc + ((m - av) ^ 2)) ((n - av) ^ 2) ns / (len - 1)
           where av = avg os
 
@@ -613,135 +640,66 @@ variance rs = Just (f <$> sequenceA rs)
 --{-# INLINE [2] listEm #-}
 
 -- | Combine two `Raster`s, element-wise, with a binary operator.
-zipWith :: (a -> b -> d) -> Raster p r c a -> Raster p r c b -> Raster p r c d
-zipWith f (Raster a) (Raster b) = Raster $ R.zipWith f a b
+zipWith :: (Source u Ix2 a, Source u Ix2 b) =>
+  (a -> b -> d) -> Raster u p r c a -> Raster u p r c b -> Raster D p r c d
+zipWith f (Raster a) (Raster b) = Raster $ A.zipWith f a b
 {-# INLINE zipWith #-}
 
+sumStencil :: (Num a, Default a) => Stencil Ix2 a a
+sumStencil = makeStencil (Fill 0) (3 :. 3) (1 :. 1) $ \f ->
+  f (-1 :. -1) + f (-1 :. 0) + f (-1 :. 1) +
+  f (0  :. -1) + f (0  :. 0) + f (0  :. 1) +
+  f (1  :. -1) + f (1  :. 0) + f (1  :. 1)
+{-# INLINE sumStencil #-}
+
 -- | Focal Addition.
-fsum :: Num a => Raster p r c a -> Raster p r c a
-fsum (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
-  where neighbourhood = [R.stencil2| 1 1 1
-                                     1 1 1
-                                     1 1 1 |]
+fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fsum (Raster a) = Raster $ mapStencil sumStencil a
 
 -- | Focal Mean.
-fmean :: Fractional a => Raster p r c a -> Raster p r c a
-fmean (Raster a) = Raster . R.delay $ R.mapStencil2 (R.BoundConst 0) neighbourhood a
-  where neighbourhood = R.makeStencil (R.ix2 3 3) f
-        f (Z :. -1 :. -1) = Just $ 1/9
-        f (Z :. -1 :.  0) = Just $ 1/9
-        f (Z :. -1 :.  1) = Just $ 1/9
-        f (Z :.  0 :. -1) = Just $ 1/9
-        f (Z :.  0 :.  0) = Just $ 1/9
-        f (Z :.  0 :.  1) = Just $ 1/9
-        f (Z :.  1 :. -1) = Just $ 1/9
-        f (Z :.  1 :.  0) = Just $ 1/9
-        f (Z :.  1 :.  1) = Just $ 1/9
-        f _               = Nothing
+fmean :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmean = fmap (/9) . fsum
+
+groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
+groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ixs
+  where ixs = (:.) <$> [-1 .. 1] <*> [-1 .. 1]
+{-# INLINE groupStencil #-}
 
 -- | Focal Maximum.
-fmax :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fmax (Raster a) = Raster . R.map maximum $ focal R.BoundClamp a
+fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmax (Raster a) = Raster $ mapStencil (groupStencil P.maximum Edge) a
 
 -- | Focal Minimum.
-fmin :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fmin (Raster a) = Raster . R.map minimum $ focal R.BoundClamp a
+fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmin (Raster a) = Raster $ mapStencil (groupStencil P.minimum Edge) a
 
--- | Focal Variety.
-fvariety :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Int
-fvariety (Raster a) = Raster . R.map (length . L.nub) $ focal R.BoundClamp a
+-- | Focal Variety - the number of unique values in each neighbourhood.
+fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
+fvariety (Raster a) = Raster $ mapStencil (groupStencil (length . L.nub) Edge) a
 
 -- | Focal Majority.
-fmajority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fmajority (Raster a) = Raster . R.map majo $ focal R.BoundClamp a
+fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmajority (Raster a) = Raster $ mapStencil (groupStencil majo Continue) a
 
 -- | Focal Minority.
-fminority :: (Focal a, Ord a) => Raster p r c a -> Raster p r c a
-fminority (Raster a) = Raster . R.map mino $ focal R.BoundClamp a
+fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fminority (Raster a) = Raster $ mapStencil (groupStencil mino Continue) a
 
--- TODO Not sure about the `Boundary` value to use here.
+percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
+percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
+  f <$> g (0 :. 0) <*> sequenceA [ g (-1 :. -1), g (-1 :. 0), g (-1 :. 1)
+                                 , g (0  :. -1),              g (0  :. 1)
+                                 , g (1  :. -1), g (1  :. 0), g (1  :. 1) ]
+{-# INLINE percStencil #-}
+
 -- | Focal Percentage, the percentage of neighbourhood values that are equal
 -- to the neighbourhood focus. Not to be confused with `fpercentile`.
-fpercentage :: (Focal a, Eq a) => Raster p r c a -> Raster p r c Double
-fpercentage (Raster a) = Raster . R.map f $ focal R.BoundClamp a
-  where f vs = fromIntegral (length . filter (== head vs) $ tail vs) / 8
+fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
+fpercentage (Raster a) = Raster $ mapStencil (percStencil f Continue) a
+  where f focus vs = fromIntegral (length $ filter (== focus) vs) / 8
 
 -- | Focal Percentile, the percentage of neighbourhood values that are /less/
 -- than the neighbourhood focus. Not to be confused with `fpercentage`.
-fpercentile :: (Focal a, Ord a) => Raster p r c a -> Raster p r c Double
-fpercentile (Raster a) = Raster . R.map f $ focal R.BoundClamp a
-  where f vs = fromIntegral (length . filter (< head vs) $ tail vs) / 8
-
--- | Yield all the values in a neighbourhood for further scrutiny.
--- The first value of the list is the neighbourhood focus.
-focal :: Focal a => R.Boundary Integer -> R.Array R.D R.DIM2 a -> R.Array R.D R.DIM2 [a]
-focal b a = R.map unpack . R.mapStencil2 b focalStencil $ R.map common a
-{-# INLINE focal #-}
-
--- | A stencil used to bit-pack each value of a focal neighbourhood into
--- a single `Integer`. Once packed, you can `fmap` over the resulting `Raster`
--- to unpack the `Integer` and scrutinize the values freely (i.e. determine
--- the maximum value, etc).
-focalStencil :: R.Stencil R.DIM2 Integer
-focalStencil = R.makeStencil (R.ix2 3 3) f
-  where f :: R.DIM2 -> Maybe Integer
-        f (Z :.  0 :.  0) = Just 1
-        f (Z :. -1 :.  0) = Just (2^64)
-        f (Z :. -1 :.  1) = Just (2^128)
-        f (Z :.  0 :. -1) = Just (2^192)
-        f (Z :. -1 :. -1) = Just (2^256)
-        f (Z :.  0 :.  1) = Just (2^320)
-        f (Z :.  1 :. -1) = Just (2^384)
-        f (Z :.  1 :.  0) = Just (2^448)
-        f (Z :.  1 :.  1) = Just (2^512)
-        f _               = Nothing
-
--- | Any type which is meaningful to perform focal operations on.
---
--- Law:
---
--- @
--- back (common v) == v
--- @
-class Focal a where
-  -- | Convert a value into an `Integer` in a way that preserves its bit layout.
-  common :: a -> Integer
-  -- | Shave the first 64 bits off an `Integer` and recreate the original value.
-  back :: Integer -> a
-
-instance Focal Word8 where
-  common = toInteger
-  back = fromInteger
-
-instance Focal Word32 where
-  common = toInteger
-  back = fromIntegral
-
-instance Focal Word64 where
-  common = toInteger
-  back = fromIntegral  -- Keeps precisely the first 64 bits of the Integer.
-
-instance Focal Float where
-  common = common . coerceToWord
-  back = coerceToFloat . back
-
-instance Focal Double where
-  common = common . coerceToWord
-  back = coerceToFloat . back
-
-instance Focal Int where
-  -- Go through `Word` to avoid sign-bit trickery.
-  common = toInteger . (\n -> fromIntegral n :: Word64)
-  back = fromIntegral . (\n -> back n :: Word64)
-
-instance Focal Int32 where
-  common = toInteger . (\n -> fromIntegral n :: Word32)
-  back = fromIntegral . (\n -> back n :: Word32)
-
-instance Focal Int64 where
-  common = toInteger . (\n -> fromIntegral n :: Word64)
-  back = fromIntegral . (\n -> back n :: Word64)
-
--- | Unpack the 9 original values that were packed into an `Integer` during a Focal op.
-unpack :: Focal a => Integer -> [a]
-unpack = take 9 . L.unfoldr (\n -> Just (back n, shiftR n 64))
+fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
+fpercentile (Raster a) = Raster $ mapStencil (percStencil f Continue) a
+  where f focus vs = fromIntegral (length $ filter (< focus) vs) / 8

@@ -1,12 +1,12 @@
 name:                mapalgebra
-version:             0.1.0
+version:             1.0.0
 synopsis:            Map Algebra types and common operations.
 description:         Map Algebra types and common operations.
 homepage:            https://github.com/fosskers/mapalgebra
 license:             BSD3
 author:              Colin Woodbury
-maintainer:          colingw@gmail.com
-copyright:           2017 Colin Woodbury
+maintainer:          colin@fosskers.ca
+copyright:           2018 Colin Woodbury
 category:            Geography
 
 extra-source-files:
@@ -19,7 +19,6 @@ ghc-options:
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
   - -Wincomplete-uni-patterns
-  - -Odph
   # These introduce around a 2x speedup.
   # - -fno-liberate-case
   # - -funfolding-use-threshold1000
@@ -27,12 +26,13 @@ ghc-options:
   # - -fllvm
 
 dependencies:
-  - base >= 4.7 && < 4.11
+  - base >= 4.7 && < 4.12
   - bytestring
   - containers
-  - floating-bits >= 0.3 && < 0.4
+  - data-default
+  - deepseq
   - JuicyPixels >= 3.2 && < 3.3
-  - repa >= 3.4 && < 3.5
+  - massiv >= 0.1 && < 0.2
   - vector >= 0.11 && < 0.13
 
 library:
@@ -44,11 +44,12 @@ tests:
     source-dirs: test
     ghc-options:
       - -threaded
+      - -with-rtsopts=-N
     dependencies:
       - mapalgebra
-      - tasty >= 0.11 && < 0.12
-      - tasty-hunit >= 0.9 && < 0.10
-      - tasty-quickcheck >= 0.8 && < 0.9
+      - tasty >= 0.11 && < 2.0
+      - tasty-hunit >= 0.9 && < 0.11
+      - tasty-quickcheck >= 0.8 && < 0.10
 
 benchmarks:
   mapalgebra-bench:
@@ -56,6 +57,8 @@ benchmarks:
     source-dirs: bench
     ghc-options:
       - -threaded
+      - -O2
+      - -with-rtsopts=-N
     dependencies:
       - criterion >= 1.1 && < 1.3
       - mapalgebra
