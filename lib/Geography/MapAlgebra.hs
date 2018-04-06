@@ -45,7 +45,8 @@ module Geography.MapAlgebra
   -- * Types
   -- ** Rasters
     Raster(..)
-  , Traversal'
+  , lazy, strict
+  -- , Traversal'
   -- , _Word8
   -- *** Creation
   , constant, fromFunction, fromVector, tiff
@@ -282,6 +283,10 @@ instance Eq a => Eq (Raster B p r c a) where
   Raster a == Raster b = a == b
   {-# INLINE (==) #-}
 
+instance Eq a => Eq (Raster D p r c a) where
+  Raster a == Raster b = a == b
+  {-# INLINE (==) #-}
+
 instance Functor (Raster DW p r c) where
   fmap f (Raster a) = Raster $ fmap f a
   {-# INLINE fmap #-}
@@ -339,6 +344,32 @@ instance Foldable (Raster p r c) where
   -- | O(1).
   length (Raster a) = R.size $ R.extent a
 -}
+
+-- TODO: more explicit implementations?
+instance Foldable (Raster D p r c) where
+  foldMap f (Raster a) = foldMap f a
+  {-# INLINE foldMap #-}
+
+  sum (Raster a) = A.sum a
+  {-# INLINE sum #-}
+
+  product (Raster a) = A.product a
+  {-# INLINE product #-}
+
+  -- | \(\mathcal{O}(1)\).
+  length (Raster a) = (\(r :. c) -> r * c) $ A.size a
+  {-# INLINE length #-}
+
+-- | \(\mathcal{O}(1)\). Force a `Raster`s representation to `D`, allowing it
+-- to undergo various operations.
+lazy :: Source u Ix2 a => Raster u p r c a -> Raster D p r c a
+lazy (Raster a) = Raster $ delay a
+{-# INLINE lazy #-}
+
+-- | Evaluate some delayed (`D`, `DW`, or `DI`) `Raster` to some explicit `Manifest` type.
+strict :: (Load v Ix2 a, Mutable u Ix2 a) => u -> Raster v p r c a -> Raster u p r c a
+strict u (Raster a) = Raster $ computeAs u a
+{-# INLINE strict #-}
 
 -- | Create a `Raster` of any size which has the same value everywhere.
 constant :: (KnownNat r, KnownNat c, Construct u Ix2 a) => u -> Comp -> a -> Raster u p r c a

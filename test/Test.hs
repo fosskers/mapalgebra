@@ -1,19 +1,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
 import           Codec.Picture
-import qualified Data.Array.Repa as R
 import qualified Data.ByteString as BS
 import           Data.Int
+import           Data.Massiv.Array as A
+import qualified Data.Massiv.Array.Manifest.Vector as A
 import qualified Data.Vector.Unboxed as U
-import           Data.Word
 import           Geography.MapAlgebra
+import           Prelude as P
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import           Test.Tasty.QuickCheck
-import qualified Data.List.NonEmpty as NE
 
 ---
 
@@ -26,41 +26,31 @@ main = do
 suite :: TestTree
 suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
-    [ testCase "constant (256x256)" $ length small @?= 65536
-    , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
-    , testCase "fromImage (256x256)" $ fmap length (NE.head <$> fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
+    [ -- testCase "constant (256x256)" $ length small @?= 65536
+    -- , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
+    -- , testCase "fromImage (256x256)" $ fmap length (NE.head <$> fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
     ]
   , testGroup "Typeclass Ops"
-    [ testCase "(==)" $ assert (small == small)
-    , testCase "(+)" $ assert (one + one == two)
+    [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
+    , testCase "(+)" $ assertBool "(+) doesn't work" (strict P (lazy one + lazy one) == two)
     ]
   , testGroup "Folds"
-    [ testCase "sum (small)" $ sum small @?= 327680
+    [ testCase "sum (small)" $ P.sum (lazy small) @?= 327680
     -- takes ~4 seconds
 --    , testCase "sum (large)" $ runIdentity (R.sumAllP $ _array big) @?= 21474836480
     ]
   , testGroup "Local Ops"
-    [ testCase "(+)" $ sum (small + small) @?= (327680 * 2)
+    [ testCase "(+)" $ P.sum (lazy small + lazy small) @?= (327680 * 2)
     -- takes ~68 seconds
 --    , testCase "(+) big" $ runIdentity (R.sumAllP . _array $ big + big) @?= 21474836480 * 2
     ]
   , testGroup "Focal Ops"
-    [ testCase "fvariety" $ fvariety one @?= one
-    , testCase "fmax" $ fmax one @?= one
-    , testCase "fmin" $ fmin one @?= one
-    ]
-  , testGroup "Focal Typeclass"
-    [ testProperty "Word8"  (\(v :: Word8)  -> back (common v) == v)
-    , testProperty "Word32" (\(v :: Word32) -> back (common v) == v)
-    , testProperty "Word64" (\(v :: Word64) -> back (common v) == v)
-    , testProperty "Float"  (\(v :: Float)  -> back (common v) == v)
-    , testProperty "Double" (\(v :: Double) -> back (common v) == v)
-    , testProperty "Int"    (\(v :: Int)    -> back (common v) == v)
-    , testProperty "Int32"  (\(v :: Int32)  -> back (common v) == v)
-    , testProperty "Int64"  (\(v :: Int64)  -> back (common v) == v)
+    [ testCase "fvariety" $ zing fvariety one --(computeAs P . _array $ fvariety one) @?= _array one
+    , testCase "fmax" $ zing fmax one -- @?= one
+    , testCase "fmin" $ zing fmin one -- @?= one
     ]
   , testGroup "Repa Behaviour"
-    [ testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
+    [ -- testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
     ]
   -- , testGroup "JuicyPixels Behaviour"
     -- [ testCase "Initial Image Height" $ (imageHeight <$> i) @?= Just 1753
@@ -69,21 +59,25 @@ suite = testGroup "Unit Tests"
     -- ]
   ]
 
-one :: Raster p 7 7 Int
-one = constant 1
+zing :: (Prim a, Eq a, Show a, Load u Ix2 a) =>
+  (Raster P p r c a -> Raster u p r c a) -> Raster P p r c a -> Assertion
+zing f r = (computeAs P . _array $ f r) @?= _array r
 
-two :: Raster p 7 7 Int
-two = constant 2
+one :: Raster P p 7 7 Int
+one = constant P Seq 1
 
-small :: Raster WebMercator 256 256 Int
-small = constant 5
+two :: Raster P p 7 7 Int
+two = constant P Seq 2
 
-big :: Raster WebMercator 65536 65536 Int
-big = constant 5
+small :: Raster P WebMercator 256 256 Int
+small = constant P Seq 5
+
+big :: Raster P WebMercator 65536 65536 Int
+big = constant P Par 5
 
 -- | Should have two rows and 3 columns.
-arr :: R.Array R.U R.DIM2 Int
-arr = R.fromUnboxed (R.ix2 2 3) $ U.fromList [0..5]
+arr :: Array U Ix2 Int
+arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
 
 img :: Image Pixel8
 img = generateImage (\_ _ -> 5) 256 256
