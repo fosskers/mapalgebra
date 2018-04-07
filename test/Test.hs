@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
@@ -30,7 +31,9 @@ suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)"     $ length (lazy small) @?= 65536
     , testCase "constant (2^16 x 2^16)" $ length lazybig @?= 4294967296
-    -- , testCase "fromImage (256x256)" $ fmap length (NE.head <$> fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
+    , testCase "Image Reading"          $ do
+        i <- file
+        fmap (getComp . _array . _red) i @?= Right Par
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
@@ -46,7 +49,7 @@ suite = testGroup "Unit Tests"
     , testCase "lvariety"  $ (strict P . lvariety . fmap lazy $ one :| [two]) @?= two
     , testCase "lmajority" $ (strict P . lmajority . fmap lazy $ one :| [one, two]) @?= one
     , testCase "lminority" $ (strict P . lminority . fmap lazy $ one :| [one, two]) @?= two
-    , testCase "(+) big"   $ strict P (lazy big + lazy big) @?= bog
+    -- , testCase "(+) big"   $ strict P (lazy big + lazy big) @?= bog
     ]
   , testGroup "Focal Ops"
     [ testCase "fvariety" $ strict P (fvariety one) @?= one
@@ -87,6 +90,9 @@ arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
 
 indices :: Raster D p 10 10 Int
 indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
+
+file :: IO (Either String (RGBARaster p 1753 1760 Word8))
+file = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
 
 img :: Image Pixel8
 img = generateImage (\_ _ -> 5) 256 256

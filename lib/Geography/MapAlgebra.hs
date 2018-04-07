@@ -1,6 +1,6 @@
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE DataKinds, KindSignatures, ScopedTypeVariables #-}
+{-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -46,10 +46,9 @@ module Geography.MapAlgebra
   -- ** Rasters
     Raster(..)
   , lazy, strict
-  -- , Traversal'
-  -- , _Word8
+  , RGBARaster(..)
   -- *** Creation
-  , constant, fromFunction, fromVector
+  , constant, fromFunction, fromVector, fromRGBA
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
   -- transformed into an `Image` by `rgba`.
@@ -77,8 +76,9 @@ module Geography.MapAlgebra
   -- writePng "foo.png" $ grayscale rast
   -- @
   -- , grayscale, rgba
-  , encodePng, encodeTiff
-  , writePng, writeTiff
+  -- , encodePng, encodeTiff
+  -- , writePng, writeTiff
+
   -- ** Projections
   , Projection(..)
   , reproject
@@ -145,8 +145,9 @@ module Geography.MapAlgebra
   , fpercentage, fpercentile
   ) where
 
-import           Codec.Picture
+import           Codec.Picture hiding (Image)
 import           Control.DeepSeq (NFData)
+import           Data.Bool (bool)
 import           Data.Default (Default)
 import           Data.Foldable
 import           Data.Int
@@ -156,6 +157,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Lazy as M
 import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array hiding (zipWith)
+import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
@@ -163,8 +165,10 @@ import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import           Data.Word
 import           GHC.TypeLits
+import           Graphics.ColorSpace (Elevator, RGBA, Pixel(..))
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
+import           Text.Printf (printf)
 
 --
 
@@ -242,10 +246,8 @@ newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 -- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
 -- `Raster` for display. This should only be used for debugging.
 instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
-  show (Raster a) = show . computeAs B $ extract' (0 :. 0) (rows :. cols) a
-    where (r :. c) = size a
-          rows = P.min r 10
-          cols = P.min c 10
+  show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
+    where (r :. c) = liftIndex (P.min 10) $ size a
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
@@ -338,13 +340,20 @@ instance Foldable (Raster D p r c) where
   length (Raster a) = (\(r :. c) -> r * c) $ A.size a
   {-# INLINE length #-}
 
--- | \(\mathcal{O}(1)\). Force a `Raster`s representation to `D`, allowing it
--- to undergo various operations.
+-- | \(\mathcal{O}(1)\). Force a `Raster`'s representation to `D`, allowing it
+-- to undergo various operations. All operations between `D` `Raster`s are fused
+-- and allocate no extra memory.
 lazy :: Source u Ix2 a => Raster u p r c a -> Raster D p r c a
 lazy (Raster a) = Raster $ delay a
 {-# INLINE lazy #-}
 
--- | Evaluate some delayed (`D`, `DW`, or `DI`) `Raster` to some explicit `Manifest` type.
+-- | Evaluate some lazy (`D`, `DW`, or `DI`) `Raster` to some explicit `Manifest` type
+-- (i.e. to a real memory-backed Array). Will follow the `Comp`utation strategy
+-- of the underlying 'massiv' `Array`.
+--
+-- __Note:__ If using the `Par` computation strategy, make sure you're compiling with
+-- @-with-rtsopts=-N@ to automatically use all available CPU cores at runtime. Otherwise
+-- your "parallel" operations will only execute on one core.
 strict :: (Load v Ix2 a, Mutable u Ix2 a) => u -> Raster v p r c a -> Raster u p r c a
 strict u (Raster a) = Raster $ computeAs u a
 {-# INLINE strict #-}
@@ -369,6 +378,33 @@ fromVector comp v | (r * c) == GV.length v = Just . Raster $ A.fromVector comp (
                   | otherwise = Nothing
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
+
+-- | An RGBA image whose colour bands are distinct. Since each band starts as `D`,
+-- any band you don't use won't consume extra memory.
+data RGBARaster p r c a = RGBARaster { _red   :: Raster D p r c a
+                                     , _green :: Raster D p r c a
+                                     , _blue  :: Raster D p r c a
+                                     , _alpha :: Raster D p r c a }
+
+-- | Read any image type into a `Raster` of distinct colour bands
+-- with the cell type you declare. If the source image stores its
+-- values as `Int` but you declare `Double`, the conversion will happen
+-- automatically.
+--
+-- Will fail with `Left` if the declared size of the `Raster`
+-- does not match the actual size of the input image.
+fromRGBA :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (RGBARaster p r c a))
+fromRGBA fp = do
+  img <- setComp Par <$> readImageAuto fp  -- TODO: Be smarter about detecting if `Seq` or `Par` should be used.
+  let rows = fromInteger $ natVal (Proxy :: Proxy r)
+      cols = fromInteger $ natVal (Proxy :: Proxy c)
+      (r :. c) = size img
+  pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
+  where f :: Image S RGBA a -> RGBARaster p r c a
+        f (delay -> img) = RGBARaster (Raster $ fmap (\(PixelRGBA r _ _ _) -> r) img)
+                                      (Raster $ fmap (\(PixelRGBA _ g _ _) -> g) img)
+                                      (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
+                                      (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
 
 -- | O(1). Create a `Raster` from a JuicyPixels image. The result, if successful,
 -- will contain as many Rasters as there were colour channels in the `Image`.
