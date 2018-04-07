@@ -10,6 +10,7 @@ import           Data.Int
 import           Data.Massiv.Array as A
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import qualified Data.Vector.Unboxed as U
+import           Data.Word
 import           Geography.MapAlgebra
 import           Prelude as P
 import           Test.Tasty
@@ -36,13 +37,11 @@ suite = testGroup "Unit Tests"
     ]
   , testGroup "Folds"
     [ testCase "sum (small)" $ P.sum (lazy small) @?= 327680
-    -- takes ~4 seconds
---    , testCase "sum (large)" $ runIdentity (R.sumAllP $ _array big) @?= 21474836480
+   -- , testCase "sum (large)" $ P.sum (lazy big) @?= 5
     ]
   , testGroup "Local Ops"
     [ testCase "(+)" $ P.sum (lazy small + lazy small) @?= (327680 * 2)
-    -- takes ~68 seconds
---    , testCase "(+) big" $ runIdentity (R.sumAllP . _array $ big + big) @?= 21474836480 * 2
+   -- , testCase "(+) big" $ assertBool "Damn" $ (lazy big + lazy big) == lazy bog -- 21474836480 * 2
     ]
   , testGroup "Focal Ops"
     [ testCase "fvariety" $ zing fvariety one --(computeAs P . _array $ fvariety one) @?= _array one
@@ -72,8 +71,11 @@ two = constant P Seq 2
 small :: Raster P WebMercator 256 256 Int
 small = constant P Seq 5
 
-big :: Raster P WebMercator 65536 65536 Int
+big :: Raster P WebMercator 65536 65536 Word8
 big = constant P Par 5
+
+bog :: Raster P WebMercator 65536 65536 Word8
+bog = constant P Par 10
 
 -- | Should have two rows and 3 columns.
 arr :: Array U Ix2 Int

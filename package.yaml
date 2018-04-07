@@ -44,8 +44,8 @@ tests:
     source-dirs: test
     ghc-options:
       - -threaded
-      - -O2
       - -with-rtsopts=-N
+      - -O2
     dependencies:
       - mapalgebra
       - tasty >= 0.11 && < 2.0
