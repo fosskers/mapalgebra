@@ -48,7 +48,7 @@ module Geography.MapAlgebra
   , lazy, strict
   , RGBARaster(..)
   -- *** Creation
-  , constant, fromFunction, fromVector, fromRGBA
+  , constant, fromFunction, fromVector, fromRGBA, fromGray
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
   -- transformed into an `Image` by `rgba`.
@@ -166,7 +166,7 @@ import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import           Data.Word
 import           GHC.TypeLits
-import           Graphics.ColorSpace (Elevator, RGBA, Pixel(..))
+import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..))
 import qualified Prelude as P
 import           Prelude hiding (div, min, max, zipWith)
 import           Text.Printf (printf)
@@ -407,6 +407,18 @@ fromRGBA fp = do
                                       (Raster $ fmap (\(PixelRGBA _ g _ _) -> g) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
+
+-- | Read a grayscale image. If the source file has more than one colour band... who knows?
+fromGray :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (Raster D p r c a))
+fromGray fp = do
+  cap <- getNumCapabilities
+  img <- setComp (bool Par Seq $ cap == 1) <$> readImageAuto fp
+  let rows = fromInteger $ natVal (Proxy :: Proxy r)
+      cols = fromInteger $ natVal (Proxy :: Proxy c)
+      (r :. c) = size img
+  pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
+  where f :: Image S Y a -> Raster D p r c a
+        f (delay -> img) = Raster $ (\(PixelY a) -> a) <$> img
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: PixelRGBA8

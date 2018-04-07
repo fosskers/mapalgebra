@@ -3,10 +3,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Main where
+module Main ( main ) where
 
-import           Codec.Picture
-import qualified Data.ByteString as BS
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A
@@ -31,9 +29,12 @@ suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)"     $ length (lazy small) @?= 65536
     , testCase "constant (2^16 x 2^16)" $ length lazybig @?= 4294967296
-    , testCase "Image Reading"          $ do
-        i <- file
+    , testCase "Image Reading (RGBA)"   $ do
+        i <- fileRGBA
         fmap (getComp . _array . _red) i @?= Right Par
+    , testCase "Image Reading (Gray)"   $ do
+        i <- fileY
+        fmap (getComp . _array) i @?= Right Par
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
@@ -91,13 +92,8 @@ arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
 indices :: Raster D p 10 10 Int
 indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
 
-file :: IO (Either String (RGBARaster p 1753 1760 Word8))
-file = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
+fileRGBA :: IO (Either String (RGBARaster p 1753 1760 Word8))
+fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
 
-img :: Image Pixel8
-img = generateImage (\_ _ -> 5) 256 256
-
-getImage :: BS.ByteString -> Maybe (Image PixelRGBA8)
-getImage bs = either (const Nothing) Just (decodeTiff bs) >>= f
-  where f (ImageRGBA8 i) = Just i
-        f _ = Nothing
+fileY :: IO (Either String (Raster D p 1753 1760 Word8))
+fileY = fromGray "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
