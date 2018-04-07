@@ -24,7 +24,7 @@
 --
 -- * Single-Raster /Local Operations/ -> `fmap` with pure functions
 -- * Multi-Raster /Local Operations/ -> `foldl` with `zipWith` and pure functions
--- * /Focal Operations/ -> Called /convolution/ elsewhere; 'massiv' has support for this (described below)
+-- * /Focal Operations/ -> More general than /convolution/; 'massiv' has support for this (described below)
 -- * /Zonal Operations/ -> ??? TODO
 --
 -- Whether it is meaningful to perform operations between two given
@@ -49,7 +49,7 @@ module Geography.MapAlgebra
   -- , Traversal'
   -- , _Word8
   -- *** Creation
-  , constant, fromFunction, fromVector, tiff
+  , constant, fromFunction, fromVector
   -- *** Colouring
   -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
   -- transformed into an `Image` by `rgba`.
@@ -147,8 +147,6 @@ module Geography.MapAlgebra
 
 import           Codec.Picture
 import           Control.DeepSeq (NFData)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
 import           Data.Default (Default)
 import           Data.Foldable
 import           Data.Int
@@ -375,13 +373,13 @@ strict u (Raster a) = Raster $ computeAs u a
 constant :: (KnownNat r, KnownNat c, Construct u Ix2 a) => u -> Comp -> a -> Raster u p r c a
 constant u c a = fromFunction u c (const a)
 
--- | O(1). Create a `Raster` from a function of its row and column number respectively.
+-- | \(\mathcal{O}(1)\). Create a `Raster` from a function of its row and column number respectively.
 fromFunction :: forall u p r c a. (KnownNat r, KnownNat c, Construct u Ix2 a) =>
   u -> Comp -> (Ix2 -> a) -> Raster u p r c a
 fromFunction u c f = Raster $ makeArrayR u c sh f
   where sh = fromInteger (natVal (Proxy :: Proxy r)) :. fromInteger (natVal (Proxy :: Proxy c))
 
--- | O(1). Create a `Raster` from the values of any `GV.Vector` type.
+-- | \(\mathcal{O}(1)\). Create a `Raster` from the values of any `GV.Vector` type.
 -- Will fail if the size of the Vector does not match the declared size of the `Raster`.
 fromVector :: forall v p r c a. (KnownNat r, KnownNat c, GV.Vector v a, Mutable (A.ARepr v) Ix2 a, Typeable v) =>
   Comp -> v a -> Maybe (Raster (A.ARepr v) p r c a)
@@ -412,7 +410,7 @@ fromVector comp v | (r * c) == GV.length v = Just . Raster $ A.fromVector comp (
 --   where n = componentCount $ pixelAt i 0 0
 
 -- | Simple Traversals compatible with both lens and microlens.
-type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
+-- type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
 
 -- | O(n). A simple Traversal for decoding/encoding ByteStrings as TIFFs.
 --
@@ -439,16 +437,16 @@ type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
 --     Nothing -> putStrLn "Darn."
 --     Just r  -> putStrLn $ "Raster has " ++ show (length r) ++ " values."
 -- @
-tiff :: Traversal' BS.ByteString DynamicImage
-tiff f bs = either (const $ pure bs) (\dn -> maybe bs id . dynamic <$> f dn) $ decodeTiff bs
-  where dynamic (ImageY8 i)     = Just . BL.toStrict $ encodeTiff i
-        dynamic (ImageY16 i)    = Just . BL.toStrict $ encodeTiff i
-        dynamic (ImageRGB8 i)   = Just . BL.toStrict $ encodeTiff i
-        dynamic (ImageRGB16 i)  = Just . BL.toStrict $ encodeTiff i
-        dynamic (ImageRGBA8 i)  = Just . BL.toStrict $ encodeTiff i
-        dynamic (ImageRGBA16 i) = Just . BL.toStrict $ encodeTiff i
-        dynamic _               = Nothing
-{-# INLINE tiff #-}
+-- tiff :: Traversal' BS.ByteString DynamicImage
+-- tiff f bs = either (const $ pure bs) (\dn -> maybe bs id . dynamic <$> f dn) $ decodeTiff bs
+--   where dynamic (ImageY8 i)     = Just . BL.toStrict $ encodeTiff i
+--         dynamic (ImageY16 i)    = Just . BL.toStrict $ encodeTiff i
+--         dynamic (ImageRGB8 i)   = Just . BL.toStrict $ encodeTiff i
+--         dynamic (ImageRGB16 i)  = Just . BL.toStrict $ encodeTiff i
+--         dynamic (ImageRGBA8 i)  = Just . BL.toStrict $ encodeTiff i
+--         dynamic (ImageRGBA16 i) = Just . BL.toStrict $ encodeTiff i
+--         dynamic _               = Nothing
+-- {-# INLINE tiff #-}
 
 -- The underlying `Image` type may change. If the user does:
 --     dn & byte .~ rs
@@ -708,11 +706,11 @@ fmin (Raster a) = Raster $ mapStencil (groupStencil P.minimum Edge) a
 fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
 fvariety (Raster a) = Raster $ mapStencil (groupStencil (length . L.nub) Edge) a
 
--- | Focal Majority.
+-- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmajority (Raster a) = Raster $ mapStencil (groupStencil majo Continue) a
 
--- | Focal Minority.
+-- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fminority (Raster a) = Raster $ mapStencil (groupStencil mino Continue) a
 
@@ -723,13 +721,13 @@ percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
                                  , g (1  :. -1), g (1  :. 0), g (1  :. 1) ]
 {-# INLINE percStencil #-}
 
--- | Focal Percentage, the percentage of neighbourhood values that are equal
+-- | Focal Percentage - the percentage of neighbourhood values that are equal
 -- to the neighbourhood focus. Not to be confused with `fpercentile`.
 fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentage (Raster a) = Raster $ mapStencil (percStencil f Continue) a
   where f focus vs = fromIntegral (length $ filter (== focus) vs) / 8
 
--- | Focal Percentile, the percentage of neighbourhood values that are /less/
+-- | Focal Percentile - the percentage of neighbourhood values that are /less/
 -- than the neighbourhood focus. Not to be confused with `fpercentage`.
 fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentile (Raster a) = Raster $ mapStencil (percStencil f Continue) a
