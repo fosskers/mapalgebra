@@ -146,6 +146,7 @@ module Geography.MapAlgebra
   ) where
 
 import           Codec.Picture hiding (Image)
+import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData)
 import           Data.Bool (bool)
 import           Data.Default (Default)
@@ -373,9 +374,9 @@ fromFunction u c f = Raster $ makeArrayR u c sh f
 -- | \(\mathcal{O}(1)\). Create a `Raster` from the values of any `GV.Vector` type.
 -- Will fail if the size of the Vector does not match the declared size of the `Raster`.
 fromVector :: forall v p r c a. (KnownNat r, KnownNat c, GV.Vector v a, Mutable (A.ARepr v) Ix2 a, Typeable v) =>
-  Comp -> v a -> Maybe (Raster (A.ARepr v) p r c a)
-fromVector comp v | (r * c) == GV.length v = Just . Raster $ A.fromVector comp (r :. c) v
-                  | otherwise = Nothing
+  Comp -> v a -> Either String (Raster (A.ARepr v) p r c a)
+fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp (r :. c) v
+                  | otherwise = Left $ printf "Expected Pixel Count: %d - Actual: %d" (r * c) (GV.length v)
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
 
@@ -391,11 +392,12 @@ data RGBARaster p r c a = RGBARaster { _red   :: Raster D p r c a
 -- values as `Int` but you declare `Double`, the conversion will happen
 -- automatically.
 --
--- Will fail with `Left` if the declared size of the `Raster`
+-- Will fail if the declared size of the `Raster`
 -- does not match the actual size of the input image.
 fromRGBA :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (RGBARaster p r c a))
 fromRGBA fp = do
-  img <- setComp Par <$> readImageAuto fp  -- TODO: Be smarter about detecting if `Seq` or `Par` should be used.
+  cap <- getNumCapabilities
+  img <- setComp (bool Par Seq $ cap == 1) <$> readImageAuto fp
   let rows = fromInteger $ natVal (Proxy :: Proxy r)
       cols = fromInteger $ natVal (Proxy :: Proxy c)
       (r :. c) = size img
@@ -405,99 +407,6 @@ fromRGBA fp = do
                                       (Raster $ fmap (\(PixelRGBA _ g _ _) -> g) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
-
--- | O(1). Create a `Raster` from a JuicyPixels image. The result, if successful,
--- will contain as many Rasters as there were colour channels in the `Image`.
--- Will fail if the size of the `Image` does not match the declared size of the `Raster`s.
---
--- Example type specifications:
---
--- @
--- Image Pixel8      -> Maybe (NonEmpty (Raster p r c Word8))
--- Image PixelRGB8   -> Maybe (NonEmpty (Raster p r c Word8))
--- Image PixelRGBA8  -> Maybe (NonEmpty (Raster p r c Word8))
--- Image Pixel16     -> Maybe (NonEmpty (Raster p r c Word16))
--- Image PixelRGB16  -> Maybe (NonEmpty (Raster p r c Word16))
--- Image PixelRGBA16 -> Maybe (NonEmpty (Raster p r c Word16))
--- Image PixelF      -> Maybe (NonEmpty (Raster p r c Float))
--- Image PixelRGBF   -> Maybe (NonEmpty (Raster p r c Float))
--- @
--- fromImage :: forall p r c a. (KnownNat r, KnownNat c, Pixel a) =>
---   Image a -> Maybe (NonEmpty (Raster p r c (PixelBaseComponent a)))
--- fromImage i = unchannel $ fromBands n i
---   where n = componentCount $ pixelAt i 0 0
-
--- | Simple Traversals compatible with both lens and microlens.
--- type Traversal' s a = forall f. Applicative f => (a -> f a) -> s -> f s
-
--- | O(n). A simple Traversal for decoding/encoding ByteStrings as TIFFs.
---
--- ==== __Example__
---
--- Read a TIFF from the filesystem and convert it to a `Raster`:
---
--- @
--- import qualified Data.ByteString as BS
--- import qualified Data.List.NonEmpty as NE
--- import           Lens.Micro  -- from `microlens`
---
--- -- Fails if the TIFF didn't decode, or if it contained a pixel type
--- -- that you weren't expecting. If successful, it grabs the first
--- -- band it can find.
--- raster :: BS.ByteString -> Maybe (Raster p 256 256 Word8)
--- raster bytes = bytes ^? tiff . _Word8 . to NE.head
---
--- -- How many pixels does my Raster have?
--- main :: IO ()
--- main = do
---   mr <- raster \<$\> BS.readFile "\/path\/to\/tiff.tif"
---   case mr of
---     Nothing -> putStrLn "Darn."
---     Just r  -> putStrLn $ "Raster has " ++ show (length r) ++ " values."
--- @
--- tiff :: Traversal' BS.ByteString DynamicImage
--- tiff f bs = either (const $ pure bs) (\dn -> maybe bs id . dynamic <$> f dn) $ decodeTiff bs
---   where dynamic (ImageY8 i)     = Just . BL.toStrict $ encodeTiff i
---         dynamic (ImageY16 i)    = Just . BL.toStrict $ encodeTiff i
---         dynamic (ImageRGB8 i)   = Just . BL.toStrict $ encodeTiff i
---         dynamic (ImageRGB16 i)  = Just . BL.toStrict $ encodeTiff i
---         dynamic (ImageRGBA8 i)  = Just . BL.toStrict $ encodeTiff i
---         dynamic (ImageRGBA16 i) = Just . BL.toStrict $ encodeTiff i
---         dynamic _               = Nothing
--- {-# INLINE tiff #-}
-
--- The underlying `Image` type may change. If the user does:
---     dn & byte .~ rs
--- where @rs@ is some `NonEmpty` of arbitrary length, then the `DynamicImage`
--- that started as a `ImageY8` couldn't possible end as one. Does this violate
--- any Traversal laws?
-
--- | O(1) to get. O(n) to set, where @n@ is the size of each Raster.
--- Getting will fail if the size of the decoded TIFF does not match the declared size of the `Raster`.
--- _Word8 :: (KnownNat r, KnownNat c) => Traversal' DynamicImage (NonEmpty (Raster p r c Word8))
--- _Word8 f di@(ImageY8    i) = maybe (pure di) (\rs -> ImageY8 . grayscale . NE.head <$> f rs) $ fromImage i
--- _Word8 f di@(ImageRGB8  i) = maybe (pure di) (\rs -> ImageRGB8 . convertRGB8 . ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
--- _Word8 f di@(ImageRGBA8 i) = maybe (pure di) (\rs -> ImageRGBA8 . rgba . crushBands <$> f rs) $ fromImage i
--- _Word8 _ i                 = pure i
--- {-# INLINE _Word8 #-}
-
--- | Separate an `R.Array` that contains a colour channel per Z-axis index
--- into a list of `Raster`s of each channel.
-{-
-unchannel :: forall p r c a. (S.Storable a, KnownNat r, KnownNat c) =>
-  R.Array R.F R.DIM3 a -> Maybe (NonEmpty (Raster p r c a))
-unchannel a | ar /= rr || ac /= rc = Nothing
-            | otherwise = Just . NE.fromList $ map rast [0 .. (chans - 1)]
-  where rast n = Raster $ R.traverse a (\(Z :. r :. c :. _) -> R.ix2 r c) (\f (Z :. r :. c) -> f $ R.ix3 r c n)
-        (Z :. ar :. ac :. chans) = R.extent a
-        rr = fromInteger $ natVal (Proxy :: Proxy r)
-        rc = fromInteger $ natVal (Proxy :: Proxy c)
--}
-
--- | O(1). Basic conversion from JuicyPixels `Image` to a repa `R.Array`.
--- Can convert any pixel type!
--- fromBands :: Pixel p => Int -> Image p -> R.Array R.F R.DIM3 (PixelBaseComponent p)
--- fromBands n i = R.fromForeignPtr (R.ix3 (imageHeight i) (imageWidth i) n) . fst . S.unsafeToForeignPtr0 $ imageData i
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: PixelRGBA8
