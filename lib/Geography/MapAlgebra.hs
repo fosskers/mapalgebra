@@ -239,27 +239,13 @@ instance Projection WebMercator where
 -- @
 newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
-{-
-instance Show a => Show (Raster p r c a) where
-  show (Raster a) = ('\n' :) . unlines . map unwords $ groupsOf cols padded
-    where (Z :. r :. c) = R.extent a
+-- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
+-- `Raster` for display. This should only be used for debugging.
+instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
+  show (Raster a) = show . computeAs B $ extract' (0 :. 0) (rows :. cols) a
+    where (r :. c) = size a
           rows = P.min r 10
           cols = P.min c 10
-          window = R.extract (R.ix2 0 0) (R.ix2 rows cols) a
-          list = map show $ R.toList window
-          longest = maximum $ map length list
-          padded = map (padTo longest) list
--}
-
--- | Pad whitespace to the front of a String so that it has a given length.
--- padTo :: Int -> String -> String
--- padTo n s = ((n - length s) `stimes` " ") ++ s
-
--- | I wish this were in the Prelude.
--- groupsOf :: Int -> [a] -> [[a]]
--- groupsOf _ [] = []
--- groupsOf n as = g : groupsOf n rest
---   where (g,rest) = splitAt n as
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
@@ -305,7 +291,10 @@ instance (KnownNat r, KnownNat c) => Applicative (Raster D p r c) where
   fs <*> as = zipWith ($) fs as
   {-# INLINE (<*>) #-}
 
--- TODO: Semigroup
+instance Semigroup a => Semigroup (Raster D p r c a) where
+  a <> b = zipWith (<>) a b
+  {-# INLINE (<>) #-}
+
 instance (Monoid a, KnownNat r, KnownNat c) => Monoid (Raster D p r c a) where
   mempty = constant D Par mempty
   {-# INLINE mempty #-}
@@ -326,24 +315,15 @@ instance (Num a, KnownNat r, KnownNat c) => Num (Raster D p r c a) where
   abs = fmap abs
   signum = fmap signum
   fromInteger = constant D Par . fromInteger
-{-
 
-instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster p r c a) where
+instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster D p r c a) where
   a / b = zipWith (/) a b
   {-# INLINE (/) #-}
 
-  fromRational = constant . fromRational
-
--- | Be careful - these operations will evaluate your lazy Raster. (Except
--- `length`, which has a specialized O(1) implementation.)
-instance Foldable (Raster p r c) where
-  foldMap f (Raster a) = R.foldAllS mappend mempty $ R.map f a
-  sum (Raster a) = R.sumAllS a
-  -- | O(1).
-  length (Raster a) = R.size $ R.extent a
--}
+  fromRational = constant D Par . fromRational
 
 -- TODO: more explicit implementations?
+-- | `length` has a specialized \(\mathcal{O}(1)\) implementation.
 instance Foldable (Raster D p r c) where
   foldMap f (Raster a) = foldMap f a
   {-# INLINE foldMap #-}
@@ -372,12 +352,14 @@ strict u (Raster a) = Raster $ computeAs u a
 -- | Create a `Raster` of any size which has the same value everywhere.
 constant :: (KnownNat r, KnownNat c, Construct u Ix2 a) => u -> Comp -> a -> Raster u p r c a
 constant u c a = fromFunction u c (const a)
+{-# INLINE constant #-}
 
 -- | \(\mathcal{O}(1)\). Create a `Raster` from a function of its row and column number respectively.
 fromFunction :: forall u p r c a. (KnownNat r, KnownNat c, Construct u Ix2 a) =>
   u -> Comp -> (Ix2 -> a) -> Raster u p r c a
 fromFunction u c f = Raster $ makeArrayR u c sh f
   where sh = fromInteger (natVal (Proxy :: Proxy r)) :. fromInteger (natVal (Proxy :: Proxy c))
+{-# INLINE fromFunction #-}
 
 -- | \(\mathcal{O}(1)\). Create a `Raster` from the values of any `GV.Vector` type.
 -- Will fail if the size of the Vector does not match the declared size of the `Raster`.

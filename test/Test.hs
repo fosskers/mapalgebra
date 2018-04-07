@@ -7,6 +7,7 @@ module Main where
 import           Codec.Picture
 import qualified Data.ByteString as BS
 import           Data.Int
+import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import qualified Data.Vector.Unboxed as U
@@ -27,26 +28,30 @@ main = do
 suite :: TestTree
 suite = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
-    [ -- testCase "constant (256x256)" $ length small @?= 65536
-    -- , testCase "constant (2^16 x 2^16)" $ length big @?= 4294967296
+    [ testCase "constant (256x256)"     $ length (lazy small) @?= 65536
+    , testCase "constant (2^16 x 2^16)" $ length lazybig @?= 4294967296
     -- , testCase "fromImage (256x256)" $ fmap length (NE.head <$> fromImage img :: Maybe (Raster p 256 256 Word8)) @?= Just 65536
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
-    , testCase "(+)" $ assertBool "(+) doesn't work" (strict P (lazy one + lazy one) == two)
+    , testCase "(+)"  $ strict P (lazy one + lazy one) @?= two
     ]
   , testGroup "Folds"
     [ testCase "sum (small)" $ P.sum (lazy small) @?= 327680
-   -- , testCase "sum (large)" $ P.sum (lazy big) @?= 5
+    -- , testCase "sum (large)" $ P.sum lazybig @?= 21474836480
     ]
   , testGroup "Local Ops"
-    [ testCase "(+)" $ P.sum (lazy small + lazy small) @?= (327680 * 2)
-   -- , testCase "(+) big" $ assertBool "Damn" $ (lazy big + lazy big) == lazy bog -- 21474836480 * 2
+    [ testCase "(+)"       $ P.sum (lazy small + lazy small) @?= (327680 * 2)
+    , testCase "lmin"      $ strict P (lmin one two) @?= one
+    , testCase "lvariety"  $ (strict P . lvariety . fmap lazy $ one :| [two]) @?= two
+    , testCase "lmajority" $ (strict P . lmajority . fmap lazy $ one :| [one, two]) @?= one
+    , testCase "lminority" $ (strict P . lminority . fmap lazy $ one :| [one, two]) @?= two
+    , testCase "(+) big"   $ strict P (lazy big + lazy big) @?= bog
     ]
   , testGroup "Focal Ops"
-    [ testCase "fvariety" $ zing fvariety one --(computeAs P . _array $ fvariety one) @?= _array one
-    , testCase "fmax" $ zing fmax one -- @?= one
-    , testCase "fmin" $ zing fmin one -- @?= one
+    [ testCase "fvariety" $ strict P (fvariety one) @?= one
+    , testCase "fmax"     $ strict P (fmax one) @?= one
+    , testCase "fmin"     $ strict P (fmin one) @?= one
     ]
   , testGroup "Repa Behaviour"
     [ -- testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
@@ -58,28 +63,30 @@ suite = testGroup "Unit Tests"
     -- ]
   ]
 
-zing :: (Prim a, Eq a, Show a, Load u Ix2 a) =>
-  (Raster P p r c a -> Raster u p r c a) -> Raster P p r c a -> Assertion
-zing f r = (computeAs P . _array $ f r) @?= _array r
-
 one :: Raster P p 7 7 Int
 one = constant P Seq 1
 
 two :: Raster P p 7 7 Int
 two = constant P Seq 2
 
-small :: Raster P WebMercator 256 256 Int
+small :: Raster P p 256 256 Int
 small = constant P Seq 5
 
-big :: Raster P WebMercator 65536 65536 Word8
+lazybig :: Raster D p 65536 65536 Int
+lazybig = constant D Par 5
+
+big :: Raster P p 65536 65536 Word8
 big = constant P Par 5
 
-bog :: Raster P WebMercator 65536 65536 Word8
+bog :: Raster P p 65536 65536 Word8
 bog = constant P Par 10
 
 -- | Should have two rows and 3 columns.
 arr :: Array U Ix2 Int
 arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
+
+indices :: Raster D p 10 10 Int
+indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
 
 img :: Image Pixel8
 img = generateImage (\_ _ -> 5) 256 256
