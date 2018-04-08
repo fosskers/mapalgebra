@@ -63,12 +63,15 @@ module Geography.MapAlgebra
   , invisible
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
-  -- *** Output
+  -- *** Output and Display
   -- | For coloured output, first use `classify` over your `Raster` to produce a
   -- @Raster D p r c (Pixel RGBA Word8)@. Then unwrap it with `_array` and output
   -- with something like `writeImage`.
+  --
+  -- For quick debugging, you can visualize a `Raster` with `display`.
   , grayscale
   , writeImage, writeImageAuto
+  , display
   -- ** Projections
   , Projection(..)
   , reproject
@@ -495,9 +498,15 @@ purpleRed = ramp colours
 
 -- | Convert a `Raster` into a 'massiv-io' `Image` for easy output with functions
 -- like `writeImage`.
-grayscale :: Raster D p r c a -> Image D Y a
+grayscale :: Storable a => Raster D p r c a -> Image D Y a
 grayscale (Raster a) = fmap PixelY a
 {-# INLINE grayscale #-}
+
+-- | View a `Raster` as grayscale with the default image viewer of your OS.
+--
+-- For more direct control, consider `displayImage` from 'massiv-io'.
+display :: Elevator a => Raster D p r c a -> IO ()
+display = displayImage . grayscale
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
