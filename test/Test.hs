@@ -8,8 +8,6 @@ module Main ( main ) where
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A
-import qualified Data.Massiv.Array.Manifest.Vector as A
-import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           Geography.MapAlgebra
 import           Prelude as P
@@ -79,18 +77,18 @@ small = constant P Seq 5
 lazybig :: Raster D p 65536 65536 Int
 lazybig = constant D Par 5
 
-big :: Raster P p 65536 65536 Word8
-big = constant P Par 5
+-- big :: Raster P p 65536 65536 Word8
+-- big = constant P Par 5
 
-bog :: Raster P p 65536 65536 Word8
-bog = constant P Par 10
+-- bog :: Raster P p 65536 65536 Word8
+-- bog = constant P Par 10
 
 -- | Should have two rows and 3 columns.
-arr :: Array U Ix2 Int
-arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
+-- arr :: Array U Ix2 Int
+-- arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
 
-indices :: Raster D p 10 10 Int
-indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
+-- indices :: Raster D p 10 10 Int
+-- indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
 
 fileRGBA :: IO (Either String (RGBARaster p 1753 1760 Word8))
 fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"

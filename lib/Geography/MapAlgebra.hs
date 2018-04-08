@@ -65,7 +65,7 @@ module Geography.MapAlgebra
   , gray, red, green, blue
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
-  -- *** Image Conversion and IO
+  -- *** Output
   -- | Some of these functions are re-exports from JuicyPixels. Exposing them here saves you an
   -- explicit dependency and import.
   --
@@ -145,7 +145,6 @@ module Geography.MapAlgebra
   , fpercentage, fpercentile
   ) where
 
-import           Codec.Picture hiding (Image)
 import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData)
 import           Data.Bool (bool)
@@ -408,7 +407,8 @@ fromRGBA fp = do
                                       (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
 
--- | Read a grayscale image. If the source file has more than one colour band... who knows?
+-- | Read a grayscale image. If the source file has more than one colour band,
+-- they'll be combined automatically.
 fromGray :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (Raster D p r c a))
 fromGray fp = do
   cap <- getNumCapabilities
@@ -421,89 +421,91 @@ fromGray fp = do
         f (delay -> img) = Raster $ (\(PixelY a) -> a) <$> img
 
 -- | An invisible pixel (alpha channel set to 0).
-invisible :: PixelRGBA8
-invisible = PixelRGBA8 0 0 0 0
+invisible :: Pixel RGBA Word8
+invisible = PixelRGBA 0 0 0 0
 
 -- | Construct a colour ramp.
-ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k PixelRGBA8
-ramp colours breaks = M.fromList . P.zip breaks $ P.map (\(r,g,b) -> PixelRGBA8 r g b maxBound) colours
+-- ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k PixelRGBA8
+ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k (Pixel RGBA Word8)
+ramp colours breaks = M.fromList . P.zip breaks $ P.map (\(r,g,b) -> PixelRGBA r g b maxBound) colours
+{-# INLINE ramp #-}
 
 -- | From page 32 of /Cartographer's Toolkit/.
-greenRed :: Ord k => [k] -> M.Map k PixelRGBA8
+greenRed :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 greenRed = ramp colours
   where colours = [ (0, 48, 0), (31, 79, 20), (100, 135, 68), (148, 193, 28), (193, 242, 3)
                   , (241, 255, 159), (249, 228, 227), (202, 145, 150), (153, 101, 97), (142, 38 ,18) ]
 
 -- | From page 33 of /Cartographer's Toolkit/.
-spectrum :: Ord k => [k] -> M.Map k PixelRGBA8
+spectrum :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 spectrum = ramp colours
   where colours = [ (0, 22, 51), (51, 18, 135), (150, 0, 204), (242, 13, 177), (255, 61, 61)
                   , (240, 152, 56), (248, 230, 99), (166, 249, 159), (184, 249, 212), (216, 230, 253) ]
 
 -- | From page 34 of /Cartographer's Toolkit/.
-blueGreen :: Ord k => [k] -> M.Map k PixelRGBA8
+blueGreen :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 blueGreen = ramp colours
   where colours = [ (29, 43, 53), (37, 44, 95), (63, 70, 134), (89, 112, 147), (87, 124, 143)
                   , (117, 160, 125), (188, 219, 173), (239, 253, 163), (222, 214, 67), (189, 138, 55) ]
 
 -- | From page 35 of /Cartographer's Toolkit/.
-purpleYellow :: Ord k => [k] -> M.Map k PixelRGBA8
+purpleYellow :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 purpleYellow = ramp colours
   where colours = [ (90, 89, 78), (73, 65, 132), (107, 86, 225), (225, 67, 94), (247, 55, 55)
                   , (251, 105, 46), (248, 174, 66), (249, 219, 25), (255, 255, 0), (242, 242, 242) ]
 
 -- | From page 36 of /Cartographer's Toolkit/.
-brownBlue :: Ord k => [k] -> M.Map k PixelRGBA8
+brownBlue :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 brownBlue = ramp colours
   where colours = [ (27, 36, 43), (86, 52, 42), (152, 107, 65), (182, 176, 152), (215, 206, 191)
                   , (198, 247, 0), (53, 227, 0), (30, 158, 184), (22, 109, 138), (12, 47, 122) ]
 
 -- | From page 37 of /Cartographer's Toolkit/.
-grayBrown :: Ord k => [k] -> M.Map k PixelRGBA8
+grayBrown :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 grayBrown = ramp colours
   where colours = [ (64, 57, 88), (95, 96, 116), (158, 158, 166), (206, 208, 197), (215, 206, 191)
                   , (186, 164, 150), (160, 124, 98), (117, 85, 72), (90, 70, 63), (39, 21, 17) ]
 
 -- | From page 38 of /Cartographer's Toolkit/.
-greenPurple :: Ord k => [k] -> M.Map k PixelRGBA8
+greenPurple :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 greenPurple = ramp colours
   where colours = [ (89, 168, 15), (158, 213, 76), (196, 237, 104), (226, 255, 158), (240, 242, 221)
                   , (248, 202, 140), (233, 161, 137), (212, 115, 132), (172, 67, 123), (140, 40, 110) ]
 
 -- | From page 39 of /Cartographer's Toolkit/.
-brownYellow :: Ord k => [k] -> M.Map k PixelRGBA8
+brownYellow :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 brownYellow = ramp colours
   where colours = [ (96, 72, 96), (120, 72, 96), (168, 96, 96), (192, 120, 96), (240, 168, 72)
                   , (248, 202, 140), (254, 236, 174), (255, 244, 194), (255, 247, 219), (255, 252, 246) ]
 
 -- | From page 40 of /Cartographer's Toolkit/.
-purpleGreen :: Ord k => [k] -> M.Map k PixelRGBA8
+purpleGreen :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 purpleGreen = ramp colours
   where colours = [ (80, 73, 113), (117, 64, 152), (148, 116, 180), (199, 178, 214), (223, 204, 228)
                   , (218, 234, 193), (171, 214, 155), (109, 192, 103), (13, 177, 75), (57, 99, 83) ]
 
 -- | From page 41 of /Cartographer's Toolkit/.
-purpleRed :: Ord k => [k] -> M.Map k PixelRGBA8
+purpleRed :: Ord k => [k] -> M.Map k (Pixel RGBA Word8)
 purpleRed = ramp colours
   where colours = [ (51, 60, 255), (76, 60, 233), (99, 60, 211), (121, 60, 188), (155, 60, 155)
                   , (166, 60, 143), (188, 60, 121), (206, 60, 94), (217, 60, 83), (255, 60, 76) ]
 
 -- | Sets each RGB channel to the key value. Example: for a `Word8` value
 -- of 125, each channel will be set to 125. The alpha channel is set to 100% opacity.
-gray :: Word8 -> PixelRGBA8
-gray w = PixelRGBA8 w w w maxBound
+gray :: Word8 -> Pixel RGBA Word8
+gray w = PixelRGBA w w w maxBound
 
 -- | Every value maps to a shade of red.
-red :: Word8 -> PixelRGBA8
-red w = PixelRGBA8 w 0 0 maxBound
+red :: Word8 -> Pixel RGBA Word8
+red w = PixelRGBA w 0 0 maxBound
 
 -- | Every value maps to a shade of green.
-green :: Word8 -> PixelRGBA8
-green w = PixelRGBA8 0 w 0 maxBound
+green :: Word8 -> Pixel RGBA Word8
+green w = PixelRGBA 0 w 0 maxBound
 
 -- | Every value maps to a shade of blue.
-blue :: Word8 -> PixelRGBA8
-blue w = PixelRGBA8 0 0 w maxBound
+blue :: Word8 -> Pixel RGBA Word8
+blue w = PixelRGBA 0 0 w maxBound
 
 -- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
 -- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"

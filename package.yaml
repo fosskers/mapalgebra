@@ -31,7 +31,6 @@ dependencies:
   - containers
   - data-default
   - deepseq
-  - JuicyPixels >= 3.2 && < 3.3
   - massiv >= 0.1 && < 0.2
   - massiv-io >= 0.1 && < 0.2
   - vector >= 0.11 && < 0.13
