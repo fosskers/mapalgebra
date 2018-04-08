@@ -50,10 +50,9 @@ module Geography.MapAlgebra
   -- *** Creation
   , constant, fromFunction, fromVector, fromRGBA, fromGray
   -- *** Colouring
-  -- | These functions and `M.Map`s can help transform a `Raster` into a state which can be further
-  -- transformed into an `Image` by `rgba`.
+  -- | Along with `classify`, these `M.Map`s can help transform a `Raster` into a state which can be further
+  -- transformed into a writable `Image` by unwrapping it with `_array`.
   --
-  --   * O(n): The functions can be used with `fmap` when you expect every input value to map to a unique colour.
   --   * O(nlogn): The `M.Map`s can be used with `classify` to transform /ranges/ of values into certain colours.
   --   Each Map-generating function (like `greenRed`) creates a "colour ramp" of 10 colours. So, it expects
   --   to be given a list of 10 "break points" which become the Map's keys. Any less than 10 will result
@@ -62,23 +61,14 @@ module Geography.MapAlgebra
   --   `invisible` can be used as the default value to `classify`, to make invisible any value that falls outside
   --   the range of the Maps.
   , invisible
-  , gray, red, green, blue
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
   -- *** Output
-  -- | Some of these functions are re-exports from JuicyPixels. Exposing them here saves you an
-  -- explicit dependency and import.
-  --
-  -- @
-  -- rast :: Raster p 256 256 Word8
-  -- rast = fromJust . fromList . concat $ replicate 256 [0..255]
-  --
-  -- writePng "foo.png" $ grayscale rast
-  -- @
-  -- , grayscale, rgba
-  -- , encodePng, encodeTiff
-  -- , writePng, writeTiff
-
+  -- | For coloured output, first use `classify` over your `Raster` to produce a
+  -- @Raster D p r c (Pixel RGBA Word8)@. Then unwrap it with `_array` and output
+  -- with something like `writeImage`.
+  , grayscale
+  , writeImage, writeImageAuto
   -- ** Projections
   , Projection(..)
   , reproject
@@ -139,6 +129,17 @@ module Geography.MapAlgebra
   , lmean, lvariety, lmajority, lminority, lvariance
   -- ** Focal Operations
   -- | Operations on one `Raster`, given some polygonal neighbourhood.
+  -- Your `Raster` must be of a `Manifest` type (i.e. backed by real memory) before
+  -- you attempt any focal operations. Without this constraint, wayward users
+  -- run the risk of setting up operations that would perform terribly.
+  -- Use `strict` to easily convert a lazy `Raster` to a memory-backed one.
+  --
+  -- @
+  -- myRaster :: Raster D p r c Float
+  --
+  -- averaged :: Raster DW p r c Float
+  -- averaged = fmean $ strict P myRaster
+  -- @
   , fsum, fmean
   , fmax, fmin
   , fmajority, fminority, fvariety
@@ -154,7 +155,7 @@ import           Data.Int
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Lazy as M
+import qualified Data.Map.Strict as M
 import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array hiding (zipWith)
 import           Data.Massiv.Array.IO
@@ -407,6 +408,8 @@ fromRGBA fp = do
                                       (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
 
+-- TODO: How to unify these two functions?
+
 -- | Read a grayscale image. If the source file has more than one colour band,
 -- they'll be combined automatically.
 fromGray :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (Raster D p r c a))
@@ -490,59 +493,11 @@ purpleRed = ramp colours
   where colours = [ (51, 60, 255), (76, 60, 233), (99, 60, 211), (121, 60, 188), (155, 60, 155)
                   , (166, 60, 143), (188, 60, 121), (206, 60, 94), (217, 60, 83), (255, 60, 76) ]
 
--- | Sets each RGB channel to the key value. Example: for a `Word8` value
--- of 125, each channel will be set to 125. The alpha channel is set to 100% opacity.
-gray :: Word8 -> Pixel RGBA Word8
-gray w = PixelRGBA w w w maxBound
-
--- | Every value maps to a shade of red.
-red :: Word8 -> Pixel RGBA Word8
-red w = PixelRGBA w 0 0 maxBound
-
--- | Every value maps to a shade of green.
-green :: Word8 -> Pixel RGBA Word8
-green w = PixelRGBA 0 w 0 maxBound
-
--- | Every value maps to a shade of blue.
-blue :: Word8 -> Pixel RGBA Word8
-blue w = PixelRGBA 0 0 w maxBound
-
--- | O(k + 1), @k@ to evaluate the `Raster`, @1@ to convert to an `Image`.
--- This will evaluate your lazy `Raster` in parallel, becoming faster "for free"
--- the more cores you add (say, @+RTS -N4@).
--- grayscale :: Raster p r c Word8 -> Image Pixel8
--- grayscale (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w)
---   where (Z :. h :. w) = R.extent arr
---         arr = runIdentity $ R.computeP a
-
--- | O(k + 1). Transform a `Raster` of pixels into a generic `Image`, ready
--- for further encoding into a PNG or TIFF. The same conditions as `grayscale` apply.
--- rgba :: Raster p r c PixelRGBA8 -> Image PixelRGBA8
--- rgba (Raster a) = Image w h $ S.unsafeFromForeignPtr0 (R.toForeignPtr arr) (h*w*z)
---   where (Z :. h :. w :. z) = R.extent arr
---         arr = runIdentity . R.computeP $ toRGBA a
-
--- | Expand a `Raster`'s inner Array into a format that JuicyPixels will like better.
--- toRGBA :: R.Array R.D R.DIM2 PixelRGBA8 -> R.Array R.D R.DIM3 Word8
--- toRGBA a = R.traverse a (\(Z :. r :. c) -> Z :. r :. c :. 4) f
---   where f g (Z :. r :. c :. 0) = (\(PixelRGBA8 w _ _ _) -> w) $ g (Z :. r :. c)
---         f g (Z :. r :. c :. 1) = (\(PixelRGBA8 _ w _ _) -> w) $ g (Z :. r :. c)
---         f g (Z :. r :. c :. 2) = (\(PixelRGBA8 _ _ w _) -> w) $ g (Z :. r :. c)
---         f g (Z :. r :. c :. _) = (\(PixelRGBA8 _ _ _ w) -> w) $ g (Z :. r :. c)
-
--- crushBands :: NonEmpty (Raster p r c Word8) -> Raster p r c PixelRGBA8
--- crushBands = undefined
-
--- TODO But the number of bands is not known ahead of time, so the `a` won't be a single,
--- known type. Yeah, the type family goes in the opposite direction. Some `Pixel a` knows
--- what its base component is, but each base component type could have many `Pixel a`
--- that use it. i.e. a `Word8` base component tells you nothing about how many channels
--- the pixel has.
---
--- So do I need a dependently-typed `NonEmpty` that knows its length? Then it could
--- form a new type family with the various Pixel types.
--- crooshBands :: Pixel a => NonEmpty (Raster p r c (PixelBaseComponent a)) -> Raster p r c a
--- crooshBands = undefined
+-- | Convert a `Raster` into a 'massiv-io' `Image` for easy output with functions
+-- like `writeImage`.
+grayscale :: Raster D p r c a -> Image D Y a
+grayscale (Raster a) = fmap PixelY a
+{-# INLINE grayscale #-}
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
