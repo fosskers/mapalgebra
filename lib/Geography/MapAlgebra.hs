@@ -50,16 +50,18 @@ module Geography.MapAlgebra
   -- *** Creation
   , constant, fromFunction, fromVector, fromRGBA, fromGray
   -- *** Colouring
-  -- | Along with `classify`, these `M.Map`s can help transform a `Raster` into a state which can be further
-  -- transformed into a writable `Image` by unwrapping it with `_array`.
-  --
-  --   * O(nlogn): The `M.Map`s can be used with `classify` to transform /ranges/ of values into certain colours.
+  -- | The `M.Map`s here can be used with `classify` to
+  --   transform /ranges/ of values into certain colours in \(\mathcal{O}(n\log(n))\).
   --   Each Map-generating function (like `greenRed`) creates a "colour ramp" of 10 colours. So, it expects
   --   to be given a list of 10 "break points" which become the Map's keys. Any less than 10 will result
   --   in the later colours not being used. Any more than 10 will be ignored. The list of break points is
   --   assumed to be sorted.
   --   `invisible` can be used as the default value to `classify`, to make invisible any value that falls outside
   --   the range of the Maps.
+  --
+  -- If you aren't interested in colour but still want to render your `Raster`,
+  -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
+  -- output with functions like `writeImage`.
   , invisible
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
