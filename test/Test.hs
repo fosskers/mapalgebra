@@ -8,10 +8,10 @@ module Main ( main ) where
 import Data.Int
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Massiv.Array as A
-import Data.Massiv.Array.IO
+-- import Data.Massiv.Array.IO
 import Data.Word
 import Geography.MapAlgebra
-import Graphics.ColorSpace (RGBA)
+-- import Graphics.ColorSpace (RGBA)
 import Prelude as P
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -89,11 +89,11 @@ lazybig = constant D Par 5
 -- arr :: Array U Ix2 Int
 -- arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
 
-indices :: Raster D p 256 256 Int
-indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
+-- indices :: Raster D p 256 256 Int
+-- indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
 
-zoop :: Raster D p 256 256 Int
-zoop = fromFunction D Seq (\(r :. c) -> r * c)
+-- zoop :: Raster D p 256 256 Int
+-- zoop = fromFunction D Seq (\(r :. c) -> r * c)
 
 fileRGBA :: IO (Either String (RGBARaster p 1753 1760 Word8))
 fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
@@ -101,5 +101,5 @@ fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_L
 fileY :: IO (Either String (Raster D p 1753 1760 Word8))
 fileY = fromGray "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
 
-colourIt :: Raster D p 256 256 Int -> Image D RGBA Word8
-colourIt = _array . classify invisible (greenRed [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000])
+-- colourIt :: Raster D p 256 256 Int -> Image D RGBA Word8
+-- colourIt = _array . classify invisible (greenRed [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000])

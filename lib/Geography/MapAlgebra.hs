@@ -145,6 +145,7 @@ module Geography.MapAlgebra
   -- averaged :: Raster DW p r c Float
   -- averaged = fmean $ strict P myRaster
   -- @
+  , fclassify
   , fsum, fmean
   , fmax, fmin
   , fmajority, fminority, fvariety
@@ -588,14 +589,20 @@ sumStencil = makeStencil (Fill 0) (3 :. 3) (1 :. 1) $ \f ->
   f (1  :. -1) + f (1  :. 0) + f (1  :. 1)
 {-# INLINE sumStencil #-}
 
+-- | Focal Classification - full control over every value in the neighbourhood.
+fclassify :: (Default a, Manifest u Ix2 a) => ([a] -> b) -> Border a -> Raster u p r c a -> Raster DW p r c b
+fclassify f e (Raster a) = Raster $ mapStencil (groupStencil f e) a
+{-# INLINE fclassify #-}
+
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fsum (Raster a) = Raster $ mapStencil sumStencil a
 
 -- | Focal Mean.
 fmean :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmean = fmap (/9) . fsum
+fmean = fmap (/ 9) . fsum
 
+-- TODO: Use `NonEmpty`?
 groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
 groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ixs
   where ixs = (:.) <$> [-1 .. 1] <*> [-1 .. 1]
@@ -603,23 +610,28 @@ groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ix
 
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmax (Raster a) = Raster $ mapStencil (groupStencil P.maximum Edge) a
+fmax = fclassify P.maximum Edge
+{-# INLINE fmax #-}
 
 -- | Focal Minimum.
 fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmin (Raster a) = Raster $ mapStencil (groupStencil P.minimum Edge) a
+fmin = fclassify P.minimum Edge
+{-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
 fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
-fvariety (Raster a) = Raster $ mapStencil (groupStencil (length . L.nub) Edge) a
+fvariety = fclassify (length . L.nub) Edge
+{-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmajority (Raster a) = Raster $ mapStencil (groupStencil majo Continue) a
+fmajority = fclassify majo Continue
+{-# INLINE fmajority #-}
 
 -- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fminority (Raster a) = Raster $ mapStencil (groupStencil mino Continue) a
+fminority = fclassify mino Continue
+{-# INLINE fminority #-}
 
 percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
 percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
