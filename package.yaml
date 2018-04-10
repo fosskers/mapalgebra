@@ -61,5 +61,5 @@ benchmarks:
       - -O2
       - -with-rtsopts=-N
     dependencies:
-      - criterion >= 1.1 && < 1.3
+      - criterion >= 1.1 && < 1.4
       - mapalgebra

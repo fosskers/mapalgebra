@@ -5,16 +5,19 @@
 
 module Main ( main ) where
 
-import Data.Int
-import Data.List.NonEmpty (NonEmpty(..))
-import Data.Massiv.Array as A
+import           Data.Int
+import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Massiv.Array as A
 -- import Data.Massiv.Array.IO
-import Data.Word
-import Geography.MapAlgebra
+import           Data.Word
+import           Geography.MapAlgebra
 -- import Graphics.ColorSpace (RGBA)
-import Prelude as P
-import Test.Tasty
-import Test.Tasty.HUnit
+import           Prelude as P
+import           Test.Tasty
+import           Test.Tasty.HUnit
+import qualified Data.Set as S
+import qualified Data.Vector.Unboxed as U
+import qualified Data.Vector as V
 
 ---
 
@@ -32,9 +35,9 @@ suite = testGroup "Unit Tests"
     , testCase "Image Reading (RGBA)"   $ do
         i <- fileRGBA
         fmap (getComp . _array . _red) i @?= Right Par
-    , testCase "Image Reading (Gray)"   $ do
-        i <- fileY
-        fmap (getComp . _array) i @?= Right Par
+    -- , testCase "Image Reading (Gray)"   $ do
+    --     i <- fileY
+    --     fmap (getComp . _array) i @?= Right Par
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
@@ -56,15 +59,13 @@ suite = testGroup "Unit Tests"
     [ testCase "fvariety" $ strict P (fvariety one) @?= one
     , testCase "fmax"     $ strict P (fmax one) @?= one
     , testCase "fmin"     $ strict P (fmin one) @?= one
+    , testGroup "fvariety"
+      [ testCase "single point" singlePoint
+      , testCase "2x2 same" twoByTwoSame
+      , testCase "2x2 diff" twoByTwoDiff
+      , testCase "3x3" threeByThree
+      ]
     ]
-  , testGroup "Repa Behaviour"
-    [ -- testCase "Row-Major Indexing" $ R.index arr (R.ix2 1 0) @?= 3
-    ]
-  -- , testGroup "JuicyPixels Behaviour"
-    -- [ testCase "Initial Image Height" $ (imageHeight <$> i) @?= Just 1753
-    -- , testCase "Initial Image Width"  $ (imageWidth  <$> i) @?= Just 1760
-    -- , testCase "Repa'd Array Size"    $ (R.extent . fromRGBA <$> i) @?= Just (Z :. 1753 :. 1760 :. 4)
-    -- ]
   ]
 
 one :: Raster P p 7 7 Int
@@ -98,8 +99,50 @@ lazybig = constant D Par 5
 fileRGBA :: IO (Either String (RGBARaster p 1753 1760 Word8))
 fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
 
-fileY :: IO (Either String (Raster D p 1753 1760 Word8))
-fileY = fromGray "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
+-- fileY :: IO (Either String (Raster D p 1753 1760 Word8))
+-- fileY = fromGray "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
 
 -- colourIt :: Raster D p 256 256 Int -> Image D RGBA Word8
 -- colourIt = _array . classify invisible (greenRed [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000])
+
+singlePoint :: Assertion
+singlePoint = actual @?= expected
+  where expected :: Raster B p 1 1 (S.Set Direction)
+        expected = constant B Seq mempty
+        actual :: Raster B p 1 1 (S.Set Direction)
+        actual = strict B . flinkage $ constant P Seq (1 :: Int)
+
+twoByTwoSame :: Assertion
+twoByTwoSame = actual @?= expected
+  where expected :: Either String (Raster B p 2 2 (S.Set Direction))
+        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ East, South ]
+                                                                  , [ West, South ]
+                                                                  , [ North,East ]
+                                                                  , [ West, North ] ]
+        actual :: Either String (Raster B p 2 2 (S.Set Direction))
+        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,1,1,1] :: [Int])
+
+twoByTwoDiff :: Assertion
+twoByTwoDiff = actual @?= expected
+  where expected :: Either String (Raster B p 2 2 (S.Set Direction))
+        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ SouthEast ]
+                                                                  , [ SouthWest ]
+                                                                  , [ NorthEast ]
+                                                                  , [ NorthWest ] ]
+        actual :: Either String (Raster B p 2 2 (S.Set Direction))
+        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,2,1] :: [Int])
+
+threeByThree :: Assertion
+threeByThree = actual @?= expected
+  where expected :: Either String (Raster B p 3 3 (S.Set Direction))
+        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ ]
+                                                                  , [ South ]
+                                                                  , [ ]
+                                                                  , [ East ]
+                                                                  , [ North, West, South, East ]
+                                                                  , [ West ]
+                                                                  , [ ]
+                                                                  , [ North ]
+                                                                  , [ ] ]
+        actual :: Either String (Raster B p 3 3 (S.Set Direction))
+        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])

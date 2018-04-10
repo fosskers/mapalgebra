@@ -150,12 +150,18 @@ module Geography.MapAlgebra
   , fmax, fmin
   , fmajority, fminority, fvariety
   , fpercentage, fpercentile
+  -- *** Lineal
+  -- | Focal operations that assume that groups of data points represent line-like objects
+  -- in a `Raster`. GaCM calls these /lineal characteristics/ and describes them fully
+  -- on page 18 and 19.
+  , Direction(..)
+  , flinkage
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData)
 import           Data.Bool (bool)
-import           Data.Default (Default)
+import           Data.Default (Default, def)
 import           Data.Foldable
 import           Data.Int
 import qualified Data.List as L
@@ -166,15 +172,17 @@ import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array hiding (zipWith)
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
+import           Data.Maybe (mapMaybe)
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
+import qualified Data.Set as S
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import           Data.Word
 import           GHC.TypeLits
 import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..))
 import qualified Prelude as P
-import           Prelude hiding (div, min, max, zipWith)
+import           Prelude hiding (zipWith)
 import           Text.Printf (printf)
 
 --
@@ -511,21 +519,22 @@ grayscale (Raster a) = fmap PixelY a
 display :: Elevator a => Raster D p r c a -> IO ()
 display = displayImage . grayscale
 
+-- TODO: Make work with `DW` as well.
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
 --
 -- This is a glorified `fmap` operation, but we expose it for convenience.
 classify :: Ord a => b -> M.Map a b -> Raster D p r c a -> Raster D p r c b
-classify def m r = fmap f r
-  where f a = maybe def snd $ M.lookupLE a m
+classify d m r = fmap f r
+  where f a = maybe d snd $ M.lookupLE a m
 
 -- | Finds the minimum value at each index between two `Raster`s.
 lmin :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
-lmin a b = zipWith P.min a b
+lmin = zipWith P.min
 
 -- | Finds the maximum value at each index between two `Raster`s.
 lmax :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
-lmax a b = zipWith P.max a b
+lmax = zipWith P.max
 
 -- | Averages the values per-index of all `Raster`s in a collection.
 lmean :: (Fractional a, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c a
@@ -597,10 +606,12 @@ fclassify f e (Raster a) = Raster $ mapStencil (groupStencil f e) a
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fsum (Raster a) = Raster $ mapStencil sumStencil a
+{-# INLINE fsum #-}
 
 -- | Focal Mean.
 fmean :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmean = fmap (/ 9) . fsum
+{-# INLINE fmean #-}
 
 -- TODO: Use `NonEmpty`?
 groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
@@ -633,6 +644,7 @@ fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster 
 fminority = fclassify mino Continue
 {-# INLINE fminority #-}
 
+-- | TODO: Rename this.
 percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
 percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
   f <$> g (0 :. 0) <*> sequenceA [ g (-1 :. -1), g (-1 :. 0), g (-1 :. 1)
@@ -651,3 +663,46 @@ fpercentage (Raster a) = Raster $ mapStencil (percStencil f Continue) a
 fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentile (Raster a) = Raster $ mapStencil (percStencil f Continue) a
   where f focus vs = fromIntegral (length $ filter (< focus) vs) / 8
+
+-- | Focal Linkage - a description of how each neighbourhood focus is connected
+-- to its neighbours. Foci of equal value to none of their neighbours will have
+-- an empty `S.Set`.
+flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (S.Set Direction)
+flinkage (Raster a) = Raster $ mapStencil linkStencil a
+
+-- `Fill def` has the highest chance of the edge pixel and the off-the-edge pixel
+-- having a different value. This is until the following is addressed:
+-- https://github.com/fosskers/mapalgebra/pull/3#issuecomment-379943208
+linkStencil :: (Default a, Eq a) => Stencil Ix2 a (S.Set Direction)
+linkStencil = makeStencil (Fill def) (3 :. 3) (1 :. 1) $ \f ->
+  let focus = f (0 :. 0)
+      axes  = S.fromList $ mapMaybe (\(Pair ix d) -> bool Nothing (Just d) $ focus == f ix) ti
+      diag (Pair ix d) | L.any (`S.member` axes) (ignores d) = Nothing
+                       | focus == f ix = Just d
+                       | otherwise = Nothing
+      diags | S.size axes > 2 = mempty
+            | otherwise = S.fromList $ mapMaybe diag ex
+  in pure $ axes <> diags
+  where ti = [ Pair (0  :. 1)  East
+             , Pair (-1 :. 0)  North
+             , Pair (0  :. -1) West
+             , Pair (1  :. 0)  South ]
+        ex = [ Pair (-1 :. 1)  NorthEast
+             , Pair (-1 :. -1) NorthWest
+             , Pair (1  :. -1) SouthWest
+             , Pair (1  :. 1)  SouthEast ]
+{-# INLINE linkStencil #-}
+
+ignores :: Direction -> [Direction]
+ignores NorthWest = [ North, West ]
+ignores SouthWest = [ West, South ]
+ignores SouthEast = [ South, East ]
+ignores NorthEast = [ North, East ]
+ignores _         = []
+
+-- | Directions that neighbourhood foci can be connected by. See `flinkage`
+-- and `flength`.
+data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
+  deriving (Eq, Ord, Show)
+
+data Pair = Pair !Ix2 !Direction

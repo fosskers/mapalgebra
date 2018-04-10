@@ -1,4 +1,10 @@
-resolver: lts-11.3
+resolver: lts-11.4
 
 packages:
   - .
+
+extra-deps:
+  - git: https://github.com/lehins/massiv
+    commit: fa3f71099db90bdd6a0dd27c6447745c35d3df49
+    subdirs:
+      - massiv

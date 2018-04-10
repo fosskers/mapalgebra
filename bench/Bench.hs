@@ -2,7 +2,6 @@
 
 module Main where
 
-import           Codec.Picture
 import           Criterion.Main
 import           Data.Maybe (fromJust)
 import qualified Data.Map.Lazy as M
@@ -41,7 +40,7 @@ main = defaultMain
       ]
     , bgroup "RGBA"
       [
-        bench "generateImage - 256"  $ nf pixelImg 256
+        -- bench "generateImage - 256"  $ nf pixelImg 256
       -- , bench "generateImage - 1024" $ nf pixelImg 1024
       -- , bench "encodePng - 256"  $ nf encodePng rgba256
       -- , bench "encodePng - 1024" $ nf encodePng rgba1024
@@ -61,40 +60,40 @@ main = defaultMain
       ]
   ]
 
-small :: Raster p 256 256 Int
-small = fromFunction (*)
+-- small :: Raster p 256 256 Int
+-- small = fromFunction (*)
 
-smallV :: Raster p 256 256 Word8
-smallV = fromJust . fromUnboxed $ U.replicate (256*256) 1
+-- smallV :: Raster p 256 256 Word8
+-- smallV = fromJust . fromUnboxed $ U.replicate (256*256) 1
 
-big :: Raster p 1024 1024 Int
-big = fromFunction (*)
+-- big :: Raster p 1024 1024 Int
+-- big = fromFunction (*)
 
-bigV :: Raster p 1024 1024 Word8
-bigV = fromJust . fromUnboxed $ U.replicate (1024*1024) 1
+-- bigV :: Raster p 1024 1024 Word8
+-- bigV = fromJust . fromUnboxed $ U.replicate (1024*1024) 1
 
-cmap :: M.Map Int PixelRGBA8
-cmap = greenRed [1, 10, 100, 1000, 10000, 20000, 30000, 40000, 50000, 60000]
+-- cmap :: M.Map Int PixelRGBA8
+-- cmap = greenRed [1, 10, 100, 1000, 10000, 20000, 30000, 40000, 50000, 60000]
 
-pixels256 :: Raster p 256 256 PixelRGBA8
-pixels256 = constant $ PixelRGBA8 125 125 125 maxBound
+-- pixels256 :: Raster p 256 256 PixelRGBA8
+-- pixels256 = constant $ PixelRGBA8 125 125 125 maxBound
 -- pixels256 = classify (PixelRGBA8 0 0 0 0) gray small
 
-pixels1024 :: Raster p 1024 1024 PixelRGBA8
-pixels1024 = constant $ PixelRGBA8 125 125 125 maxBound
+-- pixels1024 :: Raster p 1024 1024 PixelRGBA8
+-- pixels1024 = constant $ PixelRGBA8 125 125 125 maxBound
 -- pixels1024 = classify (PixelRGBA8 0 0 0 0) gray big
 
-gray256 :: Image Word8
-gray256 = generateImage (\_ _ -> 125) 256 256
+-- gray256 :: Image Word8
+-- gray256 = generateImage (\_ _ -> 125) 256 256
 
-gray1024 :: Image Word8
-gray1024 = generateImage (\_ _ -> 125) 1024 1024
+-- gray1024 :: Image Word8
+-- gray1024 = generateImage (\_ _ -> 125) 1024 1024
 
-pixelImg :: Int -> Image PixelRGBA8
-pixelImg n = generateImage (\_ _ -> PixelRGBA8 125 125 125 maxBound) n n
+-- pixelImg :: Int -> Image PixelRGBA8
+-- pixelImg n = generateImage (\_ _ -> PixelRGBA8 125 125 125 maxBound) n n
 
-rgba256 :: Image PixelRGBA8
-rgba256 = pixelImg 256
+-- rgba256 :: Image PixelRGBA8
+-- rgba256 = pixelImg 256
 
-rgba1024 :: Image PixelRGBA8
-rgba1024 = pixelImg 1024
+-- rgba1024 :: Image PixelRGBA8
+-- rgba1024 = pixelImg 1024
