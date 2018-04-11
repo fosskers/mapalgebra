@@ -65,6 +65,7 @@ suite = testGroup "Unit Tests"
       , testCase "2x2 diff" twoByTwoDiff
       , testCase "3x3" threeByThree
       ]
+    , testCase "flength" flengthTest
     ]
   ]
 
@@ -114,35 +115,46 @@ singlePoint = actual @?= expected
 
 twoByTwoSame :: Assertion
 twoByTwoSame = actual @?= expected
-  where expected :: Either String (Raster B p 2 2 (S.Set Direction))
-        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ East, South ]
-                                                                  , [ West, South ]
-                                                                  , [ North,East ]
-                                                                  , [ West, North ] ]
-        actual :: Either String (Raster B p 2 2 (S.Set Direction))
-        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,1,1,1] :: [Int])
+  where expected :: Raster B p 2 2 (S.Set Direction)
+        expected = fromRight . fromVector Seq . V.fromList $ P.map S.fromList [ [ East, South ]
+                                                                              , [ West, South ]
+                                                                              , [ North,East ]
+                                                                              , [ West, North ] ]
+        actual :: Raster B p 2 2 (S.Set Direction)
+        actual = fromRight . fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,1,1,1] :: [Int])
 
 twoByTwoDiff :: Assertion
 twoByTwoDiff = actual @?= expected
-  where expected :: Either String (Raster B p 2 2 (S.Set Direction))
-        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ SouthEast ]
-                                                                  , [ SouthWest ]
-                                                                  , [ NorthEast ]
-                                                                  , [ NorthWest ] ]
-        actual :: Either String (Raster B p 2 2 (S.Set Direction))
-        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,2,1] :: [Int])
+  where expected :: Raster B p 2 2 (S.Set Direction)
+        expected = fromRight . fromVector Seq . V.fromList $ P.map S.fromList [ [ SouthEast ]
+                                                                              , [ SouthWest ]
+                                                                              , [ NorthEast ]
+                                                                              , [ NorthWest ] ]
+        actual :: Raster B p 2 2 (S.Set Direction)
+        actual = fromRight . fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,2,1] :: [Int])
 
 threeByThree :: Assertion
 threeByThree = actual @?= expected
-  where expected :: Either String (Raster B p 3 3 (S.Set Direction))
-        expected = fromVector Seq . V.fromList $ P.map S.fromList [ [ ]
-                                                                  , [ South ]
-                                                                  , [ ]
-                                                                  , [ East ]
-                                                                  , [ North, West, South, East ]
-                                                                  , [ West ]
-                                                                  , [ ]
-                                                                  , [ North ]
-                                                                  , [ ] ]
-        actual :: Either String (Raster B p 3 3 (S.Set Direction))
-        actual = fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
+  where expected :: Raster B p 3 3 (S.Set Direction)
+        expected = fromRight . fromVector Seq . V.fromList $ P.map S.fromList [ [ ]
+                                                                              , [ South ]
+                                                                              , [ ]
+                                                                              , [ East ]
+                                                                              , [ North, West, South, East ]
+                                                                              , [ West ]
+                                                                              , [ ]
+                                                                              , [ North ]
+                                                                              , [ ] ]
+        actual :: Raster B p 3 3 (S.Set Direction)
+        actual = fromRight . fmap (strict B . flinkage) . fromVector Seq $ U.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
+
+flengthTest :: Assertion
+flengthTest = actual @?= expected
+  where actual :: Raster U p 3 3 Double
+        actual = fromRight . fmap (strict U . flength . strict B . flinkage) . fromVector Seq $ V.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
+        expected :: Raster U p 3 3 Double
+        expected = fromRight . fromVector Seq $ U.fromList [ 0, 3.5, 0, 3.5, 4, 3.5, 0, 3.5, 0 ]
+
+fromRight :: Either a b -> b
+fromRight (Right b) = b
+fromRight _ = error "Was Left"

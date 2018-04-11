@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns, TupleSections #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -155,7 +155,7 @@ module Geography.MapAlgebra
   -- in a `Raster`. GaCM calls these /lineal characteristics/ and describes them fully
   -- on page 18 and 19.
   , Direction(..)
-  , flinkage
+  , flinkage, flength
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -706,3 +706,43 @@ data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South
   deriving (Eq, Ord, Show)
 
 data Pair = Pair !Ix2 !Direction
+
+-- | The length of the lineal structure at every location.
+flength :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c Double
+flength (Raster a) = Raster $ mapStencil lenStencil a
+
+lenStencil :: Stencil Ix2 (S.Set Direction) Double
+lenStencil = makeStencil (Fill mempty) (3 :. 3) (1 :. 1) $ \f ->
+  fmap (work . M.fromList) $ P.traverse (\i -> sequenceA (i, f i)) ixs
+  where ixs  = (:.) <$> [-1 .. 1] <*> [-1 .. 1]
+{-# INLINE lenStencil #-}
+
+work :: M.Map Ix2 (S.Set Direction) -> Double
+work m = maybe 0 id $ do
+  focus <- M.lookup (0 :. 0) m
+  axes  <- P.traverse (\d -> let i = advance d in (i,) <$> M.lookup i m) $ S.toList focus
+  let corners  = S.delete (0 :. 0) . mconcat $ P.map (\(i,ds) -> S.map ((+) i . advance) ds) axes
+      cornDirs = mapMaybe (`M.lookup` m) $ S.toList corners
+      dirs     = focus : (P.map snd axes <> cornDirs)
+  pure $ foldl' (\acc s -> acc + S.foldl' (\acc' d -> acc' + g d) 0 s) 0 dirs
+  where half = 1 / 2
+        root = 1 / sqrt 2
+        g North = half
+        g West  = half
+        g South = half
+        g East  = half
+        g NorthWest = root
+        g SouthWest = root
+        g SouthEast = root
+        g NorthEast = root
+
+-- | A delta that can be applied to other `Ix2` to "move" in the direction given.
+advance :: Direction -> Ix2
+advance North = (-1 :. 0)
+advance West  = (0  :. -1)
+advance South = (1  :. 0)
+advance East  = (0  :. 1)
+advance NorthWest = (-1 :. -1)
+advance SouthWest = (1  :. -1)
+advance SouthEast = (1  :. 1)
+advance NorthEast = (-1 :. 1)
