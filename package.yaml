@@ -37,6 +37,7 @@ dependencies:
 
 library:
   source-dirs: lib
+  other-modules: []
 
 tests:
   mapalgebra-test:

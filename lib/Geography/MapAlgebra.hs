@@ -156,6 +156,12 @@ module Geography.MapAlgebra
   -- on page 18 and 19.
   , Direction(..)
   , flinkage, flength
+  -- *** Areal
+  -- | Focal operations that assume that groups of data points represent 2D areas
+  -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
+  -- on page 20 and 21.
+  , Corners(..), Occupied(..)
+  , fpartition
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -707,7 +713,8 @@ data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South
 
 data Pair = Pair !Ix2 !Direction
 
--- | The length of the lineal structure at every location.
+-- | Focal Length - the length of the lineal structure at every location. The result is in
+-- "pixel units", where 1 is the height/width of one pixel.
 flength :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c Double
 flength (Raster a) = Raster $ mapStencil lenStencil a
 
@@ -746,3 +753,26 @@ advance NorthWest = (-1 :. -1)
 advance SouthWest = (1  :. -1)
 advance SouthEast = (1  :. 1)
 advance NorthEast = (-1 :. 1)
+
+-- | A layout of the areal conditions of a single `Raster` pixel.
+-- It describes whether each pixel corner is occupied by the same
+-- "areal zone" as the pixel centre.
+data Corners = Corners { _topLeft     :: !Occupied
+                       , _bottomLeft  :: !Occupied
+                       , _bottomRight :: !Occupied
+                       , _topRight    :: !Occupied } deriving (Eq, Show)
+
+-- | A state of occupation of a pixel corner. Is it the same as the pixel
+-- centre (`Self`) or occupied by another area (`Other`)?
+data Occupied = Self | Other deriving (Eq, Ord, Show)
+
+-- | Focal Partition - The areal form of each location, only considering
+-- the top-right edge.
+fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
+fpartition (Raster a) = Raster $ mapStencil partStencil a
+
+partStencil :: (Eq a, Default a) => Stencil Ix2 a Corners
+partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f ->
+  g <$> f (0 :. 0) <*> f (-1 :. 0) <*> f (-1 :. 1) <*> f (0 :. 1)
+  where g fo tl tr br | fo /= tl && tl == tr && tr == br = Corners Self Self Self Other
+                      | otherwise = Corners Self Self Self Self

@@ -66,6 +66,7 @@ suite = testGroup "Unit Tests"
       , testCase "3x3" threeByThree
       ]
     , testCase "flength" flengthTest
+    , testCase "fpartition" fpartitionTest
     ]
   ]
 
@@ -158,3 +159,13 @@ flengthTest = actual @?= expected
 fromRight :: Either a b -> b
 fromRight (Right b) = b
 fromRight _ = error "Was Left"
+
+fpartitionTest :: Assertion
+fpartitionTest = actual @?= expected
+  where expected :: Raster B p 2 2 Corners
+        expected = fromRight . fromVector Seq $ V.fromList [ Corners Self Self Self Self
+                                                           , Corners Self Self Self Self
+                                                           , Corners Self Self Self Other
+                                                           , Corners Self Self Self Self ]
+        actual :: Raster B p 2 2 Corners
+        actual = fromRight . fmap (strict B . fpartition) . fromVector Seq $ U.fromList ([1,1,2,1] :: [Int])
