@@ -161,7 +161,7 @@ module Geography.MapAlgebra
   -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
   -- on page 20 and 21.
   , Corners(..), Surround(..)
-  , fpartition
+  , fpartition, fareals
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -778,8 +778,8 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                                -- the other edge touches a friend.
                                --
                                -- @
-                               -- [ 1 1 ]  or  [ 0 1 ]  or  [ 0 0 ]  or  [ 1 0 ]
-                               -- [ 0 0 ]      [ 0 1 ]      [ 0 1 ]      [ 0 0 ]
+                               -- [ 1 1 ]  or  [ 0 1 ]
+                               -- [ 0 0 ]      [ 0 1 ]
                                -- @
                 | Open         -- ^ A corner is surrounded by friends.
                                --
@@ -801,21 +801,33 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
 -- what `Surround` relationship does the focus have with the other pixels?
 surround :: Eq a => a -> a -> a -> a -> (Surround a)
 surround fo tl tr br
-  | up && diag && right = Complete tr
-  | up && right         = RightAngle
-  | up || right         = OneSide
-  | otherwise           = Open
+  | up && tl == tr && tr == br = Complete tr
+  | up && right = RightAngle
+  | (up && diag) || (diag && right) = OneSide
+  | otherwise = Open
   where up    = fo /= tl
         diag  = fo /= tr
         right = fo /= br
 {-# INLINE surround #-}
 
--- frontage :: Corners -> Double
--- frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
---   where f Self  = 0
---         f Other = 1 / sqrt 2
+-- | What is the total length of the areal edges (if there are any) at a given pixel?
+frontage :: Corners a -> Double
+frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
+  where f (Complete _) = 1 / sqrt 2
+        f OneSide      = 1 / 2
+        f Open         = 0
+        f RightAngle   = 1
 
--- | Focal Partition - The areal form of each location, only considering
+-- | If the given pixel is not the neighbourhood focus nor does it share its value with the focus,
+-- it might still have some of the focus's area incurring. In this case,
+-- only `Complete` would contribute to the focus's areal frontage.
+frontage' :: Eq a => a -> Corners a -> Double
+frontage' a (Corners tl bl br tr) = f tl + f bl + f br + f tr
+  where f (Complete a') = bool 0 (1 / sqrt 2) $ a == a'
+        f _ = 0
+{-# INLINE frontage' #-}
+
+-- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
 fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
 fpartition (Raster a) = Raster $ mapStencil partStencil a
@@ -826,5 +838,30 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
   tr <- f (-1 :. 1)
   br <- f (0  :. 1)
   fo <- f (0  :. 0)
-  pure $ Corners (surround fo tl fo fo) Open (surround fo fo fo br) (surround fo tl tr br)
+  pure $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
 {-# INLINE partStencil #-}
+
+-- | Like `fpartition`, but considers the `Surround` of all corners. Is alluded to
+-- in GaCM but isn't given its own operation name.
+--
+-- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
+-- not `fpartition`.
+fareals :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
+fareals (Raster a) = Raster $ mapStencil arealsStencil a
+
+arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
+arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
+  tl <- f (-1 :. -1)
+  up <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  le <- f (0  :. -1)
+  fo <- f (0  :. 0)
+  ri <- f (0  :. 1)
+  bl <- f (1  :. -1)
+  bo <- f (1  :. 0)
+  br <- f (1  :. 1)
+  pure $ Corners (surround fo up tl le)
+                 (surround fo bo bl le)
+                 (surround fo bo br ri)
+                 (surround fo up tr ri)
+{-# INLINE arealsStencil #-}

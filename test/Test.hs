@@ -67,6 +67,7 @@ suite = testGroup "Unit Tests"
       ]
     , testCase "flength" flengthTest
     , testCase "fpartition" fpartitionTest
+    , testCase "fareals" farealsTest
     ]
   ]
 
@@ -152,7 +153,7 @@ threeByThree = actual @?= expected
 flengthTest :: Assertion
 flengthTest = actual @?= expected
   where actual :: Raster U p 3 3 Double
-        actual = fromRight . fmap (strict U . flength . strict B . flinkage) . fromVector Seq $ V.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
+        actual = strict U . flength . strict B . flinkage . fromRight . fromVector Seq $ V.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
         expected :: Raster U p 3 3 Double
         expected = fromRight . fromVector Seq $ U.fromList [ 0, 3.5, 0, 3.5, 4, 3.5, 0, 3.5, 0 ]
 
@@ -168,4 +169,19 @@ fpartitionTest = actual @?= expected
                                                            , Corners OneSide Open OneSide (Complete 1)
                                                            , Corners Open Open Open Open ]
         actual :: Raster B p 2 2 (Corners Int)
-        actual = fromRight . fmap (strict B . fpartition) . fromVector Seq $ U.fromList [1,1,2,1]
+        actual = strict B . fpartition . fromRight . fromVector Seq $ U.fromList [1,1,2,1]
+
+farealsTest :: Assertion
+farealsTest = actual @?= expected
+ where expected :: Raster B p 3 3 (Corners Int)
+       expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
+                                                          , Corners Open Open Open Open
+                                                          , Corners Open Open Open Open
+                                                          , Corners Open Open Open Open
+                                                          , Corners (Complete 1) (Complete 1) (Complete 1) (Complete 1)
+                                                          , Corners Open Open Open Open
+                                                          , Corners Open Open Open Open
+                                                          , Corners Open Open Open Open
+                                                          , Corners Open Open Open Open ]
+       actual :: Raster B p 3 3 (Corners Int)
+       actual = strict B . fareals . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
