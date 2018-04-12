@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns, TupleSections #-}
+{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -797,6 +797,19 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                                -- @
   deriving (Eq, Ord, Show)
 
+-- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
+-- what `Surround` relationship does the focus have with the other pixels?
+surround :: Eq a => a -> a -> a -> a -> (Surround a)
+surround fo tl tr br
+  | up && diag && right = Complete tr
+  | up && right         = RightAngle
+  | up || right         = OneSide
+  | otherwise           = Open
+  where up    = fo /= tl
+        diag  = fo /= tr
+        right = fo /= br
+{-# INLINE surround #-}
+
 -- frontage :: Corners -> Double
 -- frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
 --   where f Self  = 0
@@ -808,15 +821,10 @@ fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster 
 fpartition (Raster a) = Raster $ mapStencil partStencil a
 
 partStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
-partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f ->
-  g <$> f (0 :. 0) <*> f (-1 :. 0) <*> f (-1 :. 1) <*> f (0 :. 1)
-  where g fo tl tr br = Corners tl' Open br' tr'
-          where up    = fo /= tl
-                diag  = fo /= tr
-                right = fo /= br
-                tl' = bool Open OneSide up
-                br' = bool Open OneSide right
-                tr' | up && diag && right = Complete tr
-                    | up && right         = RightAngle
-                    | up || right         = OneSide
-                    | otherwise           = Open
+partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
+  tl <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  br <- f (0  :. 1)
+  fo <- f (0  :. 0)
+  pure $ Corners (surround fo tl fo fo) Open (surround fo fo fo br) (surround fo tl tr br)
+{-# INLINE partStencil #-}
