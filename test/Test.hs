@@ -162,10 +162,10 @@ fromRight _ = error "Was Left"
 
 fpartitionTest :: Assertion
 fpartitionTest = actual @?= expected
-  where expected :: Raster B p 2 2 Corners
-        expected = fromRight . fromVector Seq $ V.fromList [ Corners Self Self Self Self
-                                                           , Corners Self Self Self Self
-                                                           , Corners Self Self Self Other
-                                                           , Corners Self Self Self Self ]
-        actual :: Raster B p 2 2 Corners
-        actual = fromRight . fmap (strict B . fpartition) . fromVector Seq $ U.fromList ([1,1,2,1] :: [Int])
+  where expected :: Raster B p 2 2 (Corners Int)
+        expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
+                                                           , Corners Open Open Open Open
+                                                           , Corners OneSide Open OneSide (Complete 1)
+                                                           , Corners Open Open Open Open ]
+        actual :: Raster B p 2 2 (Corners Int)
+        actual = fromRight . fmap (strict B . fpartition) . fromVector Seq $ U.fromList [1,1,2,1]

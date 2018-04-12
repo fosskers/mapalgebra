@@ -160,7 +160,7 @@ module Geography.MapAlgebra
   -- | Focal operations that assume that groups of data points represent 2D areas
   -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
   -- on page 20 and 21.
-  , Corners(..), Occupied(..)
+  , Corners(..), Surround(..)
   , fpartition
   ) where
 
@@ -757,22 +757,66 @@ advance NorthEast = (-1 :. 1)
 -- | A layout of the areal conditions of a single `Raster` pixel.
 -- It describes whether each pixel corner is occupied by the same
 -- "areal zone" as the pixel centre.
-data Corners = Corners { _topLeft     :: !Occupied
-                       , _bottomLeft  :: !Occupied
-                       , _bottomRight :: !Occupied
-                       , _topRight    :: !Occupied } deriving (Eq, Show)
+data Corners a = Corners { _topLeft     :: !(Surround a)
+                         , _bottomLeft  :: !(Surround a)
+                         , _bottomRight :: !(Surround a)
+                         , _topRight    :: !(Surround a) } deriving (Eq, Show)
 
--- | A state of occupation of a pixel corner. Is it the same as the pixel
--- centre (`Self`) or occupied by another area (`Other`)?
-data Occupied = Self | Other deriving (Eq, Ord, Show)
+-- | A state of surroundedness of a pixel corner.
+-- For the examples below, the bottom-left pixel is considered the focus and
+-- we're wondering about the surroundedness of its top-right corner.
+data Surround a = Complete !a  -- ^ A corner has three of the same opponent against it.
+                               --
+                               -- The corner is considered "occupied" by the opponent value,
+                               -- thus forming a diagonal areal edge.
+                               --
+                               -- @
+                               -- [ 1 1 ]
+                               -- [ 0 1 ]
+                               -- @
+                | OneSide      -- ^ One edge of a corner is touching an opponent, but
+                               -- the other edge touches a friend.
+                               --
+                               -- @
+                               -- [ 1 1 ]  or  [ 0 1 ]  or  [ 0 0 ]  or  [ 1 0 ]
+                               -- [ 0 0 ]      [ 0 1 ]      [ 0 1 ]      [ 0 0 ]
+                               -- @
+                | Open         -- ^ A corner is surrounded by friends.
+                               --
+                               -- @
+                               -- [ 0 0 ]
+                               -- [ 0 0 ]
+                               -- @
+                | RightAngle   -- ^ Similar to `Complete`, except that the diagonal
+                               -- opponent doesn't match the other two. The corner
+                               -- is considered surrounded, but not "occupied".
+                               --
+                               -- @
+                               -- [ 1 2 ]
+                               -- [ 0 1 ]
+                               -- @
+  deriving (Eq, Ord, Show)
+
+-- frontage :: Corners -> Double
+-- frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
+--   where f Self  = 0
+--         f Other = 1 / sqrt 2
 
 -- | Focal Partition - The areal form of each location, only considering
 -- the top-right edge.
-fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
+fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
 fpartition (Raster a) = Raster $ mapStencil partStencil a
 
-partStencil :: (Eq a, Default a) => Stencil Ix2 a Corners
+partStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
 partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f ->
   g <$> f (0 :. 0) <*> f (-1 :. 0) <*> f (-1 :. 1) <*> f (0 :. 1)
-  where g fo tl tr br | fo /= tl && tl == tr && tr == br = Corners Self Self Self Other
-                      | otherwise = Corners Self Self Self Self
+  where g fo tl tr br = Corners tl' Open br' tr'
+          where up    = fo /= tl
+                diag  = fo /= tr
+                right = fo /= br
+                tl' = bool Open OneSide up
+                br' = bool Open OneSide right
+                tr' | up && diag && right = Complete tr
+                    | up && right         = RightAngle
+                    | up || right         = OneSide
+                    | otherwise           = Open
