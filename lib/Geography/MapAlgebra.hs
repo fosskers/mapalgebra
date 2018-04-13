@@ -161,7 +161,7 @@ module Geography.MapAlgebra
   -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
   -- on page 20 and 21.
   , Cell(..), Corners(..), Surround(..)
-  , fpartition, fareals, ffrontage
+  , fpartition, fshape, ffrontage, farea
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -792,7 +792,7 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                                --
                                -- @
                                -- [ 0 0 ]  or  [ 0 0 ]  or  [ 1 0 ]
-                               -- [ 0 0 ]      [ 0 1 ]  or  [ 0 0 ]
+                               -- [ 0 0 ]      [ 0 1 ]      [ 0 0 ]
                                -- @
                 | RightAngle   -- ^ Similar to `Complete`, except that the diagonal
                                -- opponent doesn't match the other two. The corner
@@ -853,8 +853,8 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 --
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
-fareals :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
-fareals (Raster a) = Raster $ mapStencil arealsStencil a
+fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
+fshape (Raster a) = Raster $ mapStencil arealsStencil a
 
 arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
 arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
@@ -874,7 +874,31 @@ arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
 {-# INLINE arealsStencil #-}
 
 -- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
--- The output of `fareals` is the appropriate input for this function.
+--
+-- Usually, the output of `fshape` is the appropriate input for this function.
 ffrontage :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
 ffrontage (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
   where f (Cell fo cs) vs = frontage cs + foldl' (\acc (Cell v cs') -> acc + (bool (frontage' fo cs') (frontage cs') $ v == fo)) 0 vs
+
+-- | The area of a 1x1 square is 1. It has 8 right-triangular sections,
+-- each with area 1/8. So, here we prefer integer math for its speed,
+-- only diving by 8 a final time at the end, back in `farea`.
+area :: Corners a -> Int
+area (Corners tl bl br tr) = 8 - f tl - f bl - f br - f tr
+  where f (Complete _) = 1
+        f _ = 0
+{-# INLINE area #-}
+
+area' :: Eq a => a -> Corners a -> Int
+area' fo (Corners tl bl br tr) = f tl + f bl + f br + f tr
+  where f (Complete a) | a == fo = 1
+        f _ = 0
+{-# INLINE area' #-}
+
+-- | Focal Area - the area of the shape made up by a neighbourhood focus and its
+-- surrounding pixels. Each pixel is assumed to have length and width of 1.
+--
+-- Usually, the output of `fshape` is the appropriate input for this function.
+farea :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
+farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
+  where f (Cell fo cs) vs = fromIntegral (area cs + foldl' (\acc (Cell v cs') -> acc + (bool (area' fo cs') (area cs') $ v == fo)) 0 vs) / 8

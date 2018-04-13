@@ -68,8 +68,13 @@ suite = testGroup "Unit Tests"
       ]
     , testCase "flength" flengthTest
     , testCase "fpartition" fpartitionTest
-    , testCase "fareals" farealsTest
+    , testCase "fshape" fshapeTest
     , testCase "ffrontage" ffrontageTest
+    , testGroup "farea"
+      [ testCase "3x3 Open" fareaOpen
+      , testCase "3x3 Centre" fareaCentre
+      , testCase "4x4 Complex" fareaComplex
+      ]
     ]
   ]
 
@@ -173,8 +178,8 @@ fpartitionTest = actual @?= expected
         actual :: Raster B p 2 2 (Cell Int)
         actual = strict B . fpartition . fromRight . fromVector Seq $ U.fromList [1,1,2,1]
 
-farealsTest :: Assertion
-farealsTest = actual @?= expected
+fshapeTest :: Assertion
+fshapeTest = actual @?= expected
  where expected :: Raster B p 3 3 (Cell Int)
        expected = fromRight . fromVector Seq $ V.fromList [ Cell 1 $ Corners Open Open Open Open
                                                           , Cell 1 $ Corners Open Open Open Open
@@ -186,7 +191,7 @@ farealsTest = actual @?= expected
                                                           , Cell 1 $ Corners Open Open Open Open
                                                           , Cell 1 $ Corners Open Open Open Open ]
        actual :: Raster B p 3 3 (Cell Int)
-       actual = strict B . fareals . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
+       actual = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
 
 ffrontageTest :: Assertion
 ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
@@ -195,7 +200,34 @@ ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
         actual :: Double
         actual = flip index' (1 :. 1) . _array . strict P $ ffrontage rast
         rast :: Raster B p 4 4 (Cell Int)
-        rast = strict B . fareals . fromRight . fromVector Seq $ U.fromList [1,1,1,0
-                                                                            ,1,0,0,0
-                                                                            ,1,0,0,1
-                                                                            ,1,0,1,1]
+        rast = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
+                                                                           ,1,0,0,0
+                                                                           ,1,0,0,1
+                                                                           ,1,0,1,1]
+
+fareaOpen :: Assertion
+fareaOpen = actual @?= expected
+  where expected :: Raster U p 3 3 Double
+        expected = fromRight . fromVector Seq $ U.fromList [9,9,9,9,9,9,9,9,9]
+        actual :: Raster U p 3 3 Double
+        actual = strict U . farea . strict B . fshape . fromRight . fromVector Seq $ U.fromList ([0,0,0,0,0,0,0,0,0] :: [Int])
+
+fareaCentre :: Assertion
+fareaCentre = actual @?= expected
+  where expected :: Raster U p 3 3 Double
+        expected = fromRight . fromVector Seq $ U.fromList [ dia, dia, dia
+                                                           , dia, 1/2, dia
+                                                           , dia, dia, dia ]
+        dia = 8 + (1/2)
+        actual :: Raster U p 3 3 Double
+        actual = strict U . farea . strict B . fshape . fromRight . fromVector Seq $ U.fromList ([0,0,0,0,1,0,0,0,0] :: [Int])
+
+fareaComplex :: Assertion
+fareaComplex = let ?epsilon = 0.001 in actual @?~ (2 + (7 / 8) + (7 / 8) + (1 / 8))
+  where actual :: Double
+        actual = flip index' (1 :. 1) . _array . strict P $ farea rast
+        rast :: Raster B p 4 4 (Cell Int)
+        rast = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
+                                                                           ,1,0,0,0
+                                                                           ,1,0,0,1
+                                                                           ,1,0,1,1]
