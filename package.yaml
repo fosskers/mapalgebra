@@ -43,6 +43,7 @@ tests:
   mapalgebra-test:
     main: Test.hs
     source-dirs: test
+    other-modules: []
     ghc-options:
       - -threaded
       - -with-rtsopts=-N
@@ -58,6 +59,7 @@ benchmarks:
   mapalgebra-bench:
     main: Bench.hs
     source-dirs: bench
+    other-modules: []
     ghc-options:
       - -threaded
       - -O2

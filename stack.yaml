@@ -4,7 +4,5 @@ packages:
   - .
 
 extra-deps:
-  - git: https://github.com/lehins/massiv
-    commit: fa3f71099db90bdd6a0dd27c6447745c35d3df49
-    subdirs:
-      - massiv
+  - massiv-0.1.6.1
+  - massiv-io-0.1.2.0
