@@ -49,6 +49,7 @@ tests:
       - -O2
     dependencies:
       - mapalgebra
+      - HUnit-approx >= 1.1 && < 1.2
       - tasty >= 0.11 && < 2.0
       - tasty-hunit >= 0.9 && < 0.11
       - tasty-quickcheck >= 0.8 && < 0.10

@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeApplications, ImplicitParams #-}
 
 module Main ( main ) where
 
@@ -15,6 +15,7 @@ import           Geography.MapAlgebra
 import           Prelude as P
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import           Test.HUnit.Approx
 import qualified Data.Set as S
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
@@ -68,6 +69,7 @@ suite = testGroup "Unit Tests"
     , testCase "flength" flengthTest
     , testCase "fpartition" fpartitionTest
     , testCase "fareals" farealsTest
+    , testCase "ffrontage" ffrontageTest
     ]
   ]
 
@@ -163,25 +165,37 @@ fromRight _ = error "Was Left"
 
 fpartitionTest :: Assertion
 fpartitionTest = actual @?= expected
-  where expected :: Raster B p 2 2 (Corners Int)
-        expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
-                                                           , Corners Open Open Open Open
-                                                           , Corners OneSide Open OneSide (Complete 1)
-                                                           , Corners Open Open Open Open ]
-        actual :: Raster B p 2 2 (Corners Int)
+  where expected :: Raster B p 2 2 (Cell Int)
+        expected = fromRight . fromVector Seq $ V.fromList [ Cell 1 $ Corners Open Open Open Open
+                                                           , Cell 1 $ Corners Open Open Open Open
+                                                           , Cell 2 $ Corners OneSide Open OneSide (Complete 1)
+                                                           , Cell 1 $ Corners Open Open Open Open ]
+        actual :: Raster B p 2 2 (Cell Int)
         actual = strict B . fpartition . fromRight . fromVector Seq $ U.fromList [1,1,2,1]
 
 farealsTest :: Assertion
 farealsTest = actual @?= expected
- where expected :: Raster B p 3 3 (Corners Int)
-       expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners (Complete 1) (Complete 1) (Complete 1) (Complete 1)
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open ]
-       actual :: Raster B p 3 3 (Corners Int)
+ where expected :: Raster B p 3 3 (Cell Int)
+       expected = fromRight . fromVector Seq $ V.fromList [ Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 0 $ Corners (Complete 1) (Complete 1) (Complete 1) (Complete 1)
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open
+                                                          , Cell 1 $ Corners Open Open Open Open ]
+       actual :: Raster B p 3 3 (Cell Int)
        actual = strict B . fareals . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
+
+ffrontageTest :: Assertion
+ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
+  where expected :: Double
+        expected = 2 + (1 / 2) + (3 / sqrt 2)
+        actual :: Double
+        actual = flip index' (1 :. 1) . _array . strict P $ ffrontage rast
+        rast :: Raster B p 4 4 (Cell Int)
+        rast = strict B . fareals . fromRight . fromVector Seq $ U.fromList [1,1,1,0
+                                                                            ,1,0,0,0
+                                                                            ,1,0,0,1
+                                                                            ,1,0,1,1]

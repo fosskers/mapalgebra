@@ -160,8 +160,8 @@ module Geography.MapAlgebra
   -- | Focal operations that assume that groups of data points represent 2D areas
   -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
   -- on page 20 and 21.
-  , Corners(..), Surround(..)
-  , fpartition, fareals
+  , Cell(..), Corners(..), Surround(..)
+  , fpartition, fareals, ffrontage
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -754,6 +754,13 @@ advance SouthWest = (1  :. -1)
 advance SouthEast = (1  :. 1)
 advance NorthEast = (-1 :. 1)
 
+-- | A pixel of a `Raster` with areal information about its corners.
+data Cell a = Cell { _cell :: !a, _corners :: !(Corners a) } deriving (Eq, Show)
+
+instance Default a => Default (Cell a) where
+  def = Cell def (Corners Open Open Open Open)
+  {-# INLINE def #-}
+
 -- | A layout of the areal conditions of a single `Raster` pixel.
 -- It describes whether each pixel corner is occupied by the same
 -- "areal zone" as the pixel centre.
@@ -784,8 +791,8 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                 | Open         -- ^ A corner is surrounded by friends.
                                --
                                -- @
-                               -- [ 0 0 ]
-                               -- [ 0 0 ]
+                               -- [ 0 0 ]  or  [ 0 0 ]  or  [ 1 0 ]
+                               -- [ 0 0 ]      [ 0 1 ]  or  [ 0 0 ]
                                -- @
                 | RightAngle   -- ^ Similar to `Complete`, except that the diagonal
                                -- opponent doesn't match the other two. The corner
@@ -829,16 +836,16 @@ frontage' a (Corners tl bl br tr) = f tl + f bl + f br + f tr
 
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
-fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
+fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
 fpartition (Raster a) = Raster $ mapStencil partStencil a
 
-partStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
+partStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
 partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
   tl <- f (-1 :. 0)
   tr <- f (-1 :. 1)
   br <- f (0  :. 1)
   fo <- f (0  :. 0)
-  pure $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
+  pure $ Cell fo $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
 {-# INLINE partStencil #-}
 
 -- | Like `fpartition`, but considers the `Surround` of all corners. Is alluded to
@@ -846,10 +853,10 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 --
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
-fareals :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
+fareals :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
 fareals (Raster a) = Raster $ mapStencil arealsStencil a
 
-arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
+arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
 arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
   tl <- f (-1 :. -1)
   up <- f (-1 :. 0)
@@ -860,8 +867,14 @@ arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
   bl <- f (1  :. -1)
   bo <- f (1  :. 0)
   br <- f (1  :. 1)
-  pure $ Corners (surround fo up tl le)
-                 (surround fo bo bl le)
-                 (surround fo bo br ri)
-                 (surround fo up tr ri)
+  pure $ Cell fo $ Corners (surround fo up tl le)
+                           (surround fo bo bl le)
+                           (surround fo bo br ri)
+                           (surround fo up tr ri)
 {-# INLINE arealsStencil #-}
+
+-- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
+-- The output of `fareals` is the appropriate input for this function.
+ffrontage :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
+ffrontage (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
+  where f (Cell fo cs) vs = frontage cs + foldl' (\acc (Cell v cs') -> acc + (bool (frontage' fo cs') (frontage cs') $ v == fo)) 0 vs
