@@ -33,6 +33,7 @@ dependencies:
   - deepseq
   - massiv >= 0.1 && < 0.2
   - massiv-io >= 0.1 && < 0.2
+  - hmatrix >= 0.18 && < 0.19
   - vector >= 0.11 && < 0.13
 
 library:
@@ -53,6 +54,7 @@ tests:
       - tasty >= 0.11 && < 2.0
       - tasty-hunit >= 0.9 && < 0.11
       - tasty-quickcheck >= 0.8 && < 0.10
+      - QuickCheck
 
 benchmarks:
   mapalgebra-bench:

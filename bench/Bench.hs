@@ -3,11 +3,13 @@
 module Main where
 
 import           Criterion.Main
-import           Data.Maybe (fromJust)
 import qualified Data.Map.Lazy as M
+import           Data.Maybe (fromJust)
+import           Data.Monoid ((<>))
 import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           Geography.MapAlgebra
+import qualified Numeric.LinearAlgebra as LA
 
 ---
 
@@ -57,6 +59,11 @@ main = defaultMain
     , bgroup "Local Operations"
       [
         -- bench "classify 256" $ nf (classify (PixelRGBA8 0 0 0 0) gray) small
+      ]
+    , bgroup "HMatrix"
+      [ bench "linearSolveLS" $ nf (LA.linearSolveLS zing) (LA.col [8,8,8,8,8,8,8,8,8])
+      , bench "manual - MxM"  $ nf (leftPseudo <>) (LA.col [8,8,8,8,8,8,8,8,8])
+      , bench "manual - MxV"  $ nf (leftPseudo LA.#>) (LA.vector [8,8,8,8,8,8,8,8,8])
       ]
   ]
 

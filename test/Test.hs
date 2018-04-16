@@ -8,17 +8,18 @@ module Main ( main ) where
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A
--- import Data.Massiv.Array.IO
+import qualified Data.Set as S
+import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           Geography.MapAlgebra
--- import Graphics.ColorSpace (RGBA)
+import qualified Numeric.LinearAlgebra as LA
 import           Prelude as P
+import           Test.HUnit.Approx
+import qualified Test.QuickCheck.Arbitrary as QC
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import           Test.HUnit.Approx
-import qualified Data.Set as S
-import qualified Data.Vector.Unboxed as U
-import qualified Data.Vector as V
+import           Test.Tasty.QuickCheck
 
 ---
 
@@ -79,6 +80,7 @@ suite = testGroup "Unit Tests"
       [ testCase "3x3 Flat" fvolumeFlat
       , testCase "3x3 Hill" fvolumeHill
       ]
+    , testProperty "Least Squares" leastSquares
     ]
   ]
 
@@ -249,3 +251,31 @@ fvolumeHill = (flip index' (1 :. 1) $ _array actual) @?= expected
         actual = strict U . fvolume . fromRight . fromVector Seq $ U.fromList [24,24,24
                                                                               ,16,16,16
                                                                               ,8,8,8]
+
+newtype Vec = Vec [Double] deriving (Show)
+
+instance Arbitrary Vec where
+  arbitrary = Vec <$> QC.vector 9
+
+-- | A QuickCheck property to test whether my custom Least Squares is as
+-- accurate as the one provided by HMatrix.
+leastSquares :: Vec -> Bool
+leastSquares (Vec vs) = f 0 && f 1 && f 2
+  where m = head . LA.toColumns $ LA.linearSolveLS zing (LA.col vs)
+        v = leftPseudo LA.#> LA.vector vs
+        f i = (m LA.! i) =~ (v LA.! i)
+
+-- | Approximate Equality.
+(=~) :: Double -> Double -> Bool
+a =~ b = abs (a - b) < 0.0001
+
+zing :: LA.Matrix Double
+zing = LA.matrix 3 [ -1, -1, 1
+                   , -1, 0, 1
+                   , -1, 1, 1
+                   , 0, -1, 1
+                   , 0, 0, 1
+                   , 0, 1, 1
+                   , 1, -1, 1
+                   , 1, 0, 1
+                   , 1, 1, 1 ]

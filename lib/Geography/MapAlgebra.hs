@@ -166,6 +166,50 @@ module Geography.MapAlgebra
   -- | Focal operations that work over elevation `Raster`s. GaCM calls elevation
   -- features /surficial characteristics/ and describes them fully on page 21
   -- and 22.
+  --
+  -- Some of these operations require finding a "best-fit plane" that
+  -- approximates the surficial shape of each pixel. Each pixel has 9 "facet points"
+  -- calculated for it based on its surrounding pixels. We then use these facets to determine
+  -- a plane which adheres to this equation:
+  --
+  -- \[
+  -- ax + by + c = z
+  -- \]
+  -- This is a linear equation that we can solve for in the form \(Ax = B\).
+  -- For facet points \((x_i, y_i, z_i)\), we have:
+  --
+  -- \[
+  -- \begin{bmatrix}
+  -- x_0 & y_0 & 1 \\
+  -- x_1 & y_1 & 1 \\
+  -- \vdots & \vdots & \vdots \\
+  -- x_n & y_n & 1
+  -- \end{bmatrix} \begin{bmatrix}
+  -- a\\
+  -- b\\
+  -- c
+  -- \end{bmatrix} = \begin{bmatrix}
+  -- z_0\\
+  -- z_1\\
+  -- \vdots\\
+  -- z_n
+  -- \end{bmatrix}
+  -- \]
+  --
+  -- Since this system of equations is "over determined", we rework the above to
+  -- find the coefficients of the best-fitting plane via:
+  -- \[
+  --    \begin{bmatrix}
+  --        a\\
+  --        b\\
+  --        c
+  --    \end{bmatrix} = \boxed{(A^{T}A)^{-1}A^{T}}B
+  -- \]
+  -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
+  -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
+  -- avoid redundant calculations.
+  --
+  , leftPseudo
   , fvolume
   ) where
 
@@ -192,6 +236,7 @@ import qualified Data.Vector.Generic as GV
 import           Data.Word
 import           GHC.TypeLits
 import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..))
+import qualified Numeric.LinearAlgebra as LA
 import qualified Prelude as P
 import           Prelude hiding (zipWith)
 import           Text.Printf (printf)
@@ -949,3 +994,18 @@ volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
 volume :: Fractional a => a -> a -> a -> a
 volume a b c = (a + b + c) / 24
 {-# INLINE volume #-}
+
+-- | The first part to the "left pseudo inverse" needed to calculate
+-- a best-fitting plane of 9 points.
+leftPseudo :: LA.Matrix Double
+leftPseudo = LA.inv (aT <> a) <> aT
+  where aT = LA.tr' a
+        a  = LA.matrix 3 [ -1, -1, 1
+                         , -1, 0, 1
+                         , -1, 1, 1
+                         , 0, -1, 1
+                         , 0, 0, 1
+                         , 0, 1, 1
+                         , 1, -1, 1
+                         , 1, 0, 1
+                         , 1, 1, 1 ]
