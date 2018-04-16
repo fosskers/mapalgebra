@@ -75,6 +75,10 @@ suite = testGroup "Unit Tests"
       , testCase "3x3 Centre" fareaCentre
       , testCase "4x4 Complex" fareaComplex
       ]
+    , testGroup "fvolume"
+      [ testCase "3x3 Flat" fvolumeFlat
+      , testCase "3x3 Hill" fvolumeHill
+      ]
     ]
   ]
 
@@ -231,3 +235,17 @@ fareaComplex = let ?epsilon = 0.001 in actual @?~ (2 + (7 / 8) + (7 / 8) + (1 / 
                                                                            ,1,0,0,0
                                                                            ,1,0,0,1
                                                                            ,1,0,1,1]
+
+fvolumeFlat :: Assertion
+fvolumeFlat = (strict U $ fvolume expected) @?= expected
+  where expected :: Raster U p 3 3 Double
+        expected = fromRight . fromVector Seq $ U.fromList [8,8,8,8,8,8,8,8,8]
+
+fvolumeHill :: Assertion
+fvolumeHill = (flip index' (1 :. 1) $ _array actual) @?= expected
+  where expected :: Double
+        expected = P.sum [20,20,16,20,16,16,16,16,12,16,12,12] / 12
+        actual :: Raster U p 3 3 Double
+        actual = strict U . fvolume . fromRight . fromVector Seq $ U.fromList [24,24,24
+                                                                              ,16,16,16
+                                                                              ,8,8,8]

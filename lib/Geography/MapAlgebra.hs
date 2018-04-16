@@ -162,6 +162,11 @@ module Geography.MapAlgebra
   -- on page 20 and 21.
   , Cell(..), Corners(..), Surround(..)
   , fpartition, fshape, ffrontage, farea
+  -- *** Surficial
+  -- | Focal operations that work over elevation `Raster`s. GaCM calls elevation
+  -- features /surficial characteristics/ and describes them fully on page 21
+  -- and 22.
+  , fvolume
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -902,3 +907,45 @@ area' fo (Corners tl bl br tr) = f tl + f bl + f br + f tr
 farea :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
 farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
   where f (Cell fo cs) vs = fromIntegral (area cs + foldl' (\acc (Cell v cs') -> acc + (bool (area' fo cs') (area cs') $ v == fo)) 0 vs) / 8
+
+-- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
+-- represents elevation in some way.
+fvolume :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fvolume (Raster a) = Raster $ mapStencil volStencil a
+
+volStencil :: (Fractional a, Default a) => Stencil Ix2 a a
+volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
+  tl <- f (-1 :. -1)
+  up <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  le <- f (0  :. -1)
+  fo <- f (0  :. 0)
+  ri <- f (0  :. 1)
+  bl <- f (1  :. -1)
+  bo <- f (1  :. 0)
+  br <- f (1  :. 1)
+  pure $
+    let nw = (tl + up + le + fo) / 4
+        no = (up + fo) / 2
+        ne = (up + tr + fo + ri) / 4
+        we = (le + fo) / 2
+        ea = (fo + ri) / 2
+        sw = (le + fo + bl + bo) / 4
+        so = (fo + bo) / 2
+        se = (fo + ri + bo + br) / 4
+    in volume fo nw no
+       + volume fo no ne
+       + volume fo ne ea
+       + volume fo ea se
+       + volume fo se so
+       + volume fo so sw
+       + volume fo sw we
+       + volume fo we nw  -- TODO Optimize this by removing `volume` and dividing by 24 only once at the end.
+{-# INLINE volStencil #-}
+
+-- | Given three points that form a triangle in some 3-dimensional vector
+-- space, calculate the volume of the prism it forms if projected onto
+-- the @z = 0@ plane. Negative volume is possible.
+volume :: Fractional a => a -> a -> a -> a
+volume a b c = (a + b + c) / 24
+{-# INLINE volume #-}

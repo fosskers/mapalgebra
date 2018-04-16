@@ -47,7 +47,6 @@ tests:
     ghc-options:
       - -threaded
       - -with-rtsopts=-N
-      - -O2
     dependencies:
       - mapalgebra
       - HUnit-approx >= 1.1 && < 1.2
