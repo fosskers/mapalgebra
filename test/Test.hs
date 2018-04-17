@@ -81,6 +81,10 @@ suite = testGroup "Unit Tests"
       , testCase "3x3 Hill" fvolumeHill
       ]
     , testProperty "Least Squares" leastSquares
+    , testGroup "fgradient"
+      [ testCase "3x3 Flat" fgradientFlat
+      , testCase "3x3 (tau/8)" fgradient45
+      ]
     ]
   ]
 
@@ -279,3 +283,16 @@ zing = LA.matrix 3 [ -1, -1, 1
                    , 1, -1, 1
                    , 1, 0, 1
                    , 1, 1, 1 ]
+
+
+fgradientFlat :: Assertion
+fgradientFlat = actual @?= expected
+  where expected :: Raster U p 3 3 Double
+        expected = fromRight . fromVector Seq $ U.fromList [0,0,0,0,0,0,0,0,0]
+        actual :: Raster U p 3 3 Double
+        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList [1,1,1,1,1,1,1,1,1]
+
+fgradient45 :: Assertion
+fgradient45 = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 8)
+  where actual :: Raster U p 3 3 Double
+        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList [3,3,3,2,2,2,1,1,1]

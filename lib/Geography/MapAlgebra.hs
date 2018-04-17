@@ -208,9 +208,9 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  --
-  , leftPseudo
-  , fvolume
+  , fvolume, fgradient
+  -- * Utilities
+  , leftPseudo, tau
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
@@ -1009,3 +1009,28 @@ leftPseudo = LA.inv (aT <> a) <> aT
                          , 1, -1, 1
                          , 1, 0, 1
                          , 1, 1, 1 ]
+
+-- TODO: newtype wrapper for `Radians`?
+-- TODO: What is the range of expected values?
+-- | Focal Gradient - a measurement of surficial slope for each pixel relative to
+-- the horizonal cartographic plane. Results are in radians, with a flat plane
+-- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
+fgradient :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
+fgradient (Raster a) = Raster $ mapStencil (groupStencil gradient Reflect) a
+
+-- | One full rotation of the unit circle.
+tau :: Double
+tau = 6.283185307179586
+
+-- | Given a list of \(z\) values, find the slope of the best-fit
+-- plane that matches those points.
+--
+-- See: https://stackoverflow.com/a/16669463/643684
+gradient :: [Double] -> Double
+gradient vs = (tau / 2) - (acos $ normal vs LA.! 2)
+
+-- | Given a list of \(z\) values, find a normal vector that /points down/
+-- from a best-fit plane toward the cartographic plane.
+normal :: [Double] -> LA.Vector Double
+normal vs = LA.normalize $ LA.vector [ coeffs LA.! 0, coeffs LA.! 1, -1 ]
+  where coeffs = leftPseudo LA.#> LA.vector vs
