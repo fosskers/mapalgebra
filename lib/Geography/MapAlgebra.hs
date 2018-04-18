@@ -208,7 +208,7 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , fvolume, fgradient, faspect
+  , fvolume, fgradient, faspect, faspect'
   -- * Utilities
   , leftPseudo, tau
   ) where
@@ -482,7 +482,7 @@ fromRGBA fp = do
 
 -- | Read a grayscale image. If the source file has more than one colour band,
 -- they'll be combined automatically.
-fromGray :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (Raster D p r c a))
+fromGray :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (Raster S p r c a))
 fromGray fp = do
   cap <- getNumCapabilities
   img <- setComp (bool Par Seq $ cap == 1) <$> readImageAuto fp
@@ -490,8 +490,8 @@ fromGray fp = do
       cols = fromInteger $ natVal (Proxy :: Proxy c)
       (r :. c) = size img
   pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
-  where f :: Image S Y a -> Raster D p r c a
-        f (delay -> img) = Raster $ (\(PixelY a) -> a) <$> img
+  where f :: Image S Y a -> Raster S p r c a
+        f (delay -> img) = strict S . Raster $ (\(PixelY a) -> a) <$> img
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: Pixel RGBA Word8
@@ -994,27 +994,55 @@ volume :: Fractional a => a -> a -> a -> a
 volume a b c = (a + b + c) / 24
 {-# INLINE volume #-}
 
+-- | Given a massiv Stencil "getter" function, yield the surficial facet points
+-- of the neighbourhood focus.
+facets :: (Real a, Fractional b, Applicative f) => (Ix2 -> f a) -> f [b]
+facets f = do
+  tl <- realToFrac <$> f (-1 :. -1)
+  up <- realToFrac <$> f (-1 :. 0)
+  tr <- realToFrac <$> f (-1 :. 1)
+  le <- realToFrac <$> f (0  :. -1)
+  fo <- realToFrac <$> f (0  :. 0)
+  ri <- realToFrac <$> f (0  :. 1)
+  bl <- realToFrac <$> f (1  :. -1)
+  bo <- realToFrac <$> f (1  :. 0)
+  br <- realToFrac <$> f (1  :. 1)
+  pure [ (tl + up + le + fo) / 4
+       , (up + fo) / 2
+       , (up + tr + fo + ri) / 4
+       , (le + fo) / 2
+       , fo
+       , (fo + ri) / 2
+       , (le + fo + bl + bo) / 4
+       , (fo + bo) / 2
+       , (fo + ri + bo + br) / 4 ]
+
+-- | Get the surficial facets for each pixel and apply some function to them.
+facetStencil :: (Real a, Fractional b, Default a) => ([b] -> c) -> Stencil Ix2 a c
+facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (fmap f . facets)
+{-# INLINE facetStencil #-}
+
 -- | The first part to the "left pseudo inverse" needed to calculate
 -- a best-fitting plane of 9 points.
 leftPseudo :: LA.Matrix Double
 leftPseudo = LA.inv (aT <> a) <> aT
   where aT = LA.tr' a
-        a  = LA.matrix 3 [ -1, -1, 1
-                         , -1, 0, 1
-                         , -1, 1, 1
-                         , 0, -1, 1
+        a  = LA.matrix 3 [ -0.5, -0.5, 1
+                         , -0.5, 0, 1
+                         , -0.5, 0.5, 1
+                         , 0, -0.5, 1
                          , 0, 0, 1
-                         , 0, 1, 1
-                         , 1, -1, 1
-                         , 1, 0, 1
-                         , 1, 1, 1 ]
+                         , 0, 0.5, 1
+                         , 0.5, -0.5, 1
+                         , 0.5, 0, 1
+                         , 0.5, 0.5, 1 ]
 
 -- TODO: newtype wrapper for `Radians`?
 -- | Focal Gradient - a measurement of surficial slope for each pixel relative to
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
 fgradient :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
-fgradient (Raster a) = Raster $ mapStencil (groupStencil gradient Reflect) a
+fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
 
 -- | One full rotation of the unit circle.
 tau :: Double
@@ -1043,8 +1071,8 @@ zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 
 -- | Focal Aspect - the compass direction toward which the surface
 -- descends most rapidly. Results are in radians, with TODO (talk about directions)
-faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
-faspect (Raster a) = Raster $ mapStencil (groupStencil f Reflect) a
+faspect :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c (Maybe Double)
+faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = case normal' vs of
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
                    | otherwise -> Just . acos $ LA.dot (LA.normalize $ zcoord 0 n) axis
@@ -1052,7 +1080,10 @@ faspect (Raster a) = Raster $ mapStencil (groupStencil f Reflect) a
 
 -- | Approximate Equality.
 (=~) :: Double -> Double -> Bool
-a =~ b = abs (a - b) < 0.0001
+a =~ b = abs (a - b) < 0.000001
 
--- TODO faspect', the (likely) faster but unrigourous version that gives undefined
--- results when the normal is straight down.
+-- | Like `faspect`, but maybe faster? Beware of nonsense results when the plane is flat.
+faspect' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
+faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
+  where f vs = acos $ LA.dot (LA.normalize $ zcoord 0 $ normal' vs) axis
+        axis = LA.vector [1, 0, 0]

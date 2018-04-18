@@ -278,16 +278,15 @@ leastSquares (Vec vs) = f 0 && f 1 && f 2
 a =~ b = abs (a - b) < 0.0001
 
 zing :: LA.Matrix Double
-zing = LA.matrix 3 [ -1, -1, 1
-                   , -1, 0, 1
-                   , -1, 1, 1
-                   , 0, -1, 1
+zing = LA.matrix 3 [ -0.5, -0.5, 1
+                   , -0.5, 0, 1
+                   , -0.5, 0.5, 1
+                   , 0, -0.5, 1
                    , 0, 0, 1
-                   , 0, 1, 1
-                   , 1, -1, 1
-                   , 1, 0, 1
-                   , 1, 1, 1 ]
-
+                   , 0, 0.5, 1
+                   , 0.5, -0.5, 1
+                   , 0.5, 0, 1
+                   , 0.5, 0.5, 1 ]
 
 fgradientFlat :: Assertion
 fgradientFlat = actual @?= expected
@@ -304,9 +303,9 @@ fgradient45 = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?
 faspectFlat :: Assertion
 faspectFlat = (flip index' (1 :. 1) $ _array actual) @?= Nothing
   where actual :: Raster B p 3 3 (Maybe Double)
-        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList [1,1,1,1,1,1,1,1,1]
+        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 faspect45 :: Assertion
 faspect45 = (flip index' (1 :. 1) $ _array actual) @?= Just (tau / 2)
   where actual :: Raster B p 3 3 (Maybe Double)
-        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList [3,3,3,2,2,2,1,1,1]
+        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList ([3,3,3,2,2,2,1,1,1] :: [Double])
