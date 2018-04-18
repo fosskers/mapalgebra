@@ -67,7 +67,7 @@ module Geography.MapAlgebra
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
   -- *** Output and Display
   -- | For coloured output, first use `classify` over your `Raster` to produce a
-  -- @Raster D p r c (Pixel RGBA Word8)@. Then unwrap it with `_array` and output
+  -- @Raster u p r c (Pixel RGBA Word8)@. Then unwrap it with `_array` and output
   -- with something like `writeImage`.
   --
   -- For quick debugging, you can visualize a `Raster` with `display`.
@@ -563,24 +563,23 @@ purpleRed = ramp colours
   where colours = [ (51, 60, 255), (76, 60, 233), (99, 60, 211), (121, 60, 188), (155, 60, 155)
                   , (166, 60, 143), (188, 60, 121), (206, 60, 94), (217, 60, 83), (255, 60, 76) ]
 
--- | Convert a `Raster` into a 'massiv-io' `Image` for easy output with functions
+-- | Convert a `Raster` into a grayscale pixels, suitable for easy output with functions
 -- like `writeImage`.
-grayscale :: Storable a => Raster D p r c a -> Image D Y a
-grayscale (Raster a) = fmap PixelY a
+grayscale :: Functor (Raster u p r c) => Raster u p r c a -> Raster u p r c (Pixel Y a)
+grayscale = fmap PixelY
 {-# INLINE grayscale #-}
 
 -- | View a `Raster` as grayscale with the default image viewer of your OS.
 --
 -- For more direct control, consider `displayImage` from 'massiv-io'.
-display :: Elevator a => Raster D p r c a -> IO ()
-display = displayImage . grayscale
+display :: (Functor (Raster u p r c), Load u Ix2 (Pixel Y a), Elevator a) => Raster u p r c a -> IO ()
+display = displayImage . computeAs S . _array . grayscale
 
--- TODO: Make work with `DW` as well.
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
 --
 -- This is a glorified `fmap` operation, but we expose it for convenience.
-classify :: Ord a => b -> M.Map a b -> Raster D p r c a -> Raster D p r c b
+classify :: (Ord a, Functor f) => b -> M.Map a b -> f a -> f b
 classify d m r = fmap f r
   where f a = maybe d snd $ M.lookupLE a m
 
