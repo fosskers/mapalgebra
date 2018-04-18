@@ -208,7 +208,7 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , fvolume, fgradient
+  , fvolume, fgradient, faspect
   -- * Utilities
   , leftPseudo, tau
   ) where
@@ -1011,7 +1011,6 @@ leftPseudo = LA.inv (aT <> a) <> aT
                          , 1, 1, 1 ]
 
 -- TODO: newtype wrapper for `Radians`?
--- TODO: What is the range of expected values?
 -- | Focal Gradient - a measurement of surficial slope for each pixel relative to
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
@@ -1032,5 +1031,29 @@ gradient vs = (tau / 2) - (acos $ normal vs LA.! 2)
 -- | Given a list of \(z\) values, find a normal vector that /points down/
 -- from a best-fit plane toward the cartographic plane.
 normal :: [Double] -> LA.Vector Double
-normal vs = LA.normalize $ LA.vector [ coeffs LA.! 0, coeffs LA.! 1, -1 ]
-  where coeffs = leftPseudo LA.#> LA.vector vs
+normal = LA.normalize . zcoord (-1) . normal'
+
+-- | A non-normalized, non-Z-corrected normal. Handy for `faspect`,
+-- which needs to drop the Z and renormalize.
+normal' :: [Double] -> LA.Vector Double
+normal' vs = leftPseudo LA.#> LA.vector vs
+
+-- | Replace the Z-coordinate of a Vector.
+zcoord :: Double -> LA.Vector Double -> LA.Vector Double
+zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
+
+-- | Focal Aspect - the compass direction toward which the surface
+-- descends most rapidly. Results are in radians, with TODO (talk about directions)
+faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
+faspect (Raster a) = Raster $ mapStencil (groupStencil f Reflect) a
+  where f vs = case normal' vs of
+                 n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
+                   | otherwise -> Just . acos $ LA.dot (LA.normalize $ zcoord 0 n) axis
+        axis = LA.vector [1, 0, 0]
+
+-- | Approximate Equality.
+(=~) :: Double -> Double -> Bool
+a =~ b = abs (a - b) < 0.0001
+
+-- TODO faspect', the (likely) faster but unrigourous version that gives undefined
+-- results when the normal is straight down.

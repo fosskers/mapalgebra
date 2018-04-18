@@ -85,6 +85,10 @@ suite = testGroup "Unit Tests"
       [ testCase "3x3 Flat" fgradientFlat
       , testCase "3x3 (tau/8)" fgradient45
       ]
+    , testGroup "faspect"
+      [ testCase "3x3 Flat" faspectFlat
+      , testCase "3x3 Hill" faspect45
+      ]
     ]
   ]
 
@@ -296,3 +300,13 @@ fgradient45 :: Assertion
 fgradient45 = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 8)
   where actual :: Raster U p 3 3 Double
         actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList [3,3,3,2,2,2,1,1,1]
+
+faspectFlat :: Assertion
+faspectFlat = (flip index' (1 :. 1) $ _array actual) @?= Nothing
+  where actual :: Raster B p 3 3 (Maybe Double)
+        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList [1,1,1,1,1,1,1,1,1]
+
+faspect45 :: Assertion
+faspect45 = (flip index' (1 :. 1) $ _array actual) @?= Just (tau / 2)
+  where actual :: Raster B p 3 3 (Maybe Double)
+        actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList [3,3,3,2,2,2,1,1,1]
