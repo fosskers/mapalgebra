@@ -94,6 +94,11 @@ suite = testGroup "Unit Tests"
       [ testCase "3x3 Spikey" fdownstream4
       , testCase "3x3 Flat" fdownstreamFlat
       , testCase "3x3 Peak" fdownstreamPeak
+      , testCase "3x3 Pit"  fdownstreamPit
+      ]
+    , testGroup "fupstream"
+      [ testCase "3x3 Peak" fupstreamPeak
+      , testCase "3x3 Flat" fupstreamFlat
       ]
     ]
   ]
@@ -335,3 +340,18 @@ fdownstreamPeak :: Assertion
 fdownstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [NorthEast, NorthWest, SouthWest, SouthEast]
   where actual :: Raster B p 3 3 (S.Set Direction)
         actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
+
+fdownstreamPit :: Assertion
+fdownstreamPit = (flip index' (1 :. 1) $ _array actual) @?= S.empty
+  where actual :: Raster B p 3 3 (S.Set Direction)
+        actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([2,2,2,2,1,2,2,2,2] :: [Double])
+
+fupstreamFlat :: Assertion
+fupstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [East ..]
+  where actual :: Raster B p 3 3 (S.Set Direction)
+        actual = strict B . fupstream . strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
+
+fupstreamPeak :: Assertion
+fupstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= S.empty
+  where actual :: Raster B p 3 3 (S.Set Direction)
+        actual = strict B . fupstream . strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])

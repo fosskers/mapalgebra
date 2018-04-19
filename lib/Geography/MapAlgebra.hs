@@ -1,6 +1,7 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -234,6 +235,7 @@ import qualified Data.Set as S
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import           Data.Word
+import           GHC.Generics (Generic)
 import           GHC.TypeLits
 import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..))
 import qualified Numeric.LinearAlgebra as LA
@@ -758,7 +760,7 @@ ignores _         = []
 -- | Directions that neighbourhood foci can be connected by. See `flinkage`
 -- and `flength`.
 data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
-  deriving (Eq, Ord, Enum, Show)
+  deriving (Eq, Ord, Enum, Show, Generic, NFData)
 
 data Pair = Pair !Ix2 !Direction
 
@@ -1121,7 +1123,9 @@ fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Rast
 fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
 
 downstream :: [Double] -> S.Set Direction
-downstream [nw, no, ne, we, fo, ea, sw, so, se] = snd . foldl' f (fmap S.singleton $ head angles) $ tail angles
+downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
+  | length (filter (<= fo) ds) == 1 = S.empty  -- A pit. All neighbours are higher.
+  | otherwise = snd . foldl' f (S.singleton <$> head angles) $ tail angles
   where fo'  = LA.vector [0, 0, fo]
         axis = LA.vector [0, 0, -1]
         f (!curr, !s) (!a, !d) | a =~ curr = (curr, S.insert d s)
@@ -1141,8 +1145,10 @@ downstream _ = S.empty
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
 -- directions from which liquid would flow into each surface location.
 -- See also `fdownstream`.
-fupstream :: Raster u p r c (S.Set Direction) -> Raster DW p r c (S.Set Direction)
-fupstream (Raster a) = undefined
+fupstream :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c (S.Set Direction)
+fupstream (Raster a) = Raster $ mapStencil (percStencil f $ Fill S.empty) a
+  where f _ vs = S.fromList . P.map fst . filter (\(d, s) -> S.member d s) $ P.zip ds vs
+        ds = [ SouthEast, South, SouthWest, East, West, NorthEast, North, NorthWest ]
 
 -- dtow :: [Direction] -> Word8
 -- dtow = undefined

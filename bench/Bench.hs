@@ -62,7 +62,7 @@ main = do
     --   , bench "strict P . lazy" $ nf (_array . strict P . lazy) img
     --   ]
     , bgroup "Local Operations"
-      [ bench "lmax" $ nf (_array . strict S . lmax img) img
+      [ -- bench "lmax" $ nf (_array . strict S . lmax img) img
         -- bench "classify 256" $ nf (classify (PixelRGBA8 0 0 0 0) gray) small
       ]
     -- , bgroup "HMatrix"
@@ -78,9 +78,12 @@ main = do
     , bgroup "Focal Operations"
       [ bench "fsum"  $ nf (_array . strict S . fsum) img
       -- , bench "fmean" $ nf (_array . strict S . fmean) img
-      , bgroup "faspect"
-        [ bench "Unsafe" $ nf (_array . strict S . faspect') img
-        , bench "Safe"   $ nf (_array . strict B . faspect) img
+      -- , bgroup "faspect"
+      --   [ bench "Unsafe" $ nf (_array . strict S . faspect') img
+      --   , bench "Safe"   $ nf (_array . strict B . faspect) img
+      --   ]
+      , bgroup "fdownstream"
+        [ bench "Set" $ nf (_array . strict B . fdownstream) img
         ]
       ]
     ]
