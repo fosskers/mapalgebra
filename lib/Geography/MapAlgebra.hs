@@ -1126,20 +1126,17 @@ downstream :: [Double] -> S.Set Direction
 downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
   | length (filter (<= fo) ds) == 1 = S.empty  -- A pit. All neighbours are higher.
   | otherwise = snd . foldl' f (S.singleton <$> head angles) $ tail angles
-  where fo'  = LA.vector [0, 0, fo]
-        axis = LA.vector [0, 0, -1]
-        f (!curr, !s) (!a, !d) | a =~ curr = (curr, S.insert d s)
-                               | a <  curr = (a, S.singleton d)
+  where f (!curr, !s) (!a, !d) | a =~ curr = (curr, S.insert d s)
+                               | a >  curr = (a, S.singleton d)
                                | otherwise = (curr, s)
-        angles = [ (g [-0.5, -0.5, nw], NorthWest)
-                 , (g [-0.5, 0, no],    North)
-                 , (g [-0.5, 0.5, ne],  NorthEast)
-                 , (g [0, -0.5, we],    West)
-                 , (g [0, 0.5, ea],     East)
-                 , (g [0.5, -0.5, sw],  SouthWest)
-                 , (g [0.5, 0, so],     South)
-                 , (g [0.5, 0.5, se],   SouthEast) ]
-        g v = angle axis . LA.normalize $ LA.vector v - fo'
+        angles = [ (fo - nw, NorthWest)
+                 , (fo - no, North)
+                 , (fo - ne, NorthEast)
+                 , (fo - we, West)
+                 , (fo - ea, East)
+                 , (fo - sw, SouthWest)
+                 , (fo - so, South)
+                 , (fo - se, SouthEast) ]
 downstream _ = S.empty
 
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
