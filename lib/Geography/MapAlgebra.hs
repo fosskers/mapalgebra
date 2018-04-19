@@ -1070,7 +1070,9 @@ zcoord :: Double -> LA.Vector Double -> LA.Vector Double
 zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 
 -- | Focal Aspect - the compass direction toward which the surface
--- descends most rapidly. Results are in radians, with TODO (talk about directions)
+-- descends most rapidly. Results are in radians, with 0 or \(\tau\) being North,
+-- \(\tau / 4\) being East, and so on. For areas that are essentially flat, their
+-- aspect will be `Nothing`.
 faspect :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c (Maybe Double)
 faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = case normal' vs of
@@ -1082,7 +1084,7 @@ faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
 (=~) :: Double -> Double -> Bool
 a =~ b = abs (a - b) < 0.000001
 
--- | Like `faspect`, but maybe faster? Beware of nonsense results when the plane is flat.
+-- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
 faspect' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = acos $ LA.dot (LA.normalize $ zcoord 0 $ normal' vs) axis

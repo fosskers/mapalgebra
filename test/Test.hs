@@ -87,7 +87,8 @@ suite = testGroup "Unit Tests"
       ]
     , testGroup "faspect"
       [ testCase "3x3 Flat" faspectFlat
-      , testCase "3x3 Hill" faspect45
+      , testCase "3x3 East" faspectEast
+      , testCase "3x3 South" faspect45
       ]
     ]
   ]
@@ -293,12 +294,12 @@ fgradientFlat = actual @?= expected
   where expected :: Raster U p 3 3 Double
         expected = fromRight . fromVector Seq $ U.fromList [0,0,0,0,0,0,0,0,0]
         actual :: Raster U p 3 3 Double
-        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList [1,1,1,1,1,1,1,1,1]
+        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fgradient45 :: Assertion
 fgradient45 = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 8)
   where actual :: Raster U p 3 3 Double
-        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList [3,3,3,2,2,2,1,1,1]
+        actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList ([3,3,3,2,2,2,1,1,1] :: [Double])
 
 faspectFlat :: Assertion
 faspectFlat = (flip index' (1 :. 1) $ _array actual) @?= Nothing
@@ -309,3 +310,8 @@ faspect45 :: Assertion
 faspect45 = (flip index' (1 :. 1) $ _array actual) @?= Just (tau / 2)
   where actual :: Raster B p 3 3 (Maybe Double)
         actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList ([3,3,3,2,2,2,1,1,1] :: [Double])
+
+faspectEast :: Assertion
+faspectEast = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 4)
+  where actual :: Raster B p 3 3 Double
+        actual = strict B . faspect' . fromRight . fromVector Seq $ U.fromList ([3,2,1,3,2,1,3,2,1] :: [Double])
