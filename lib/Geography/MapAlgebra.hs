@@ -209,7 +209,7 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
+  , fvolume, fgradient, faspect, faspect', fdownstream, fdownstream', fupstream
   -- * Utilities
   , leftPseudo, tau
   ) where
@@ -1138,6 +1138,29 @@ downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
                  , (fo - so, South)
                  , (fo - se, SouthEast) ]
 downstream _ = S.empty
+
+-- | Like `fdownstream`, but encodes drainage patterns using the scheme described
+-- on page 81 of GaCM. TODO Explain it here anyway!
+fdownstream' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Word8
+fdownstream' (Raster a) = Raster $ mapStencil (facetStencil downstream') a
+{-# INLINE fdownstream' #-}
+
+downstream' :: [Double] -> Word8
+downstream' ds@[nw, no, ne, we, fo, ea, sw, so, se]
+  | length (filter (<= fo) ds) == 1 = 0  -- A pit. All neighbours are higher.
+  | otherwise = snd . foldl' f (head angles) $ tail angles
+  where f (!curr, !s) (!a, !d) | a =~ curr = (curr, s + d)
+                               | a >  curr = (a, d)
+                               | otherwise = (curr, s)
+        angles = [ (fo - nw, 1)
+                 , (fo - no, 2)
+                 , (fo - ne, 4)
+                 , (fo - we, 8)
+                 , (fo - ea, 16)
+                 , (fo - sw, 32)
+                 , (fo - so, 64)
+                 , (fo - se, 128) ]
+downstream' _ = 0
 
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
 -- directions from which liquid would flow into each surface location.

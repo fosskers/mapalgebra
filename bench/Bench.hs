@@ -83,7 +83,8 @@ main = do
       --   , bench "Safe"   $ nf (_array . strict B . faspect) img
       --   ]
       , bgroup "fdownstream"
-        [ bench "Set" $ nf (_array . strict B . fdownstream) img
+        [ bench "Set"  $ nf (_array . strict B . fdownstream) img
+        , bench "Word" $ nf (_array . strict P . fdownstream') img
         ]
       ]
     ]
