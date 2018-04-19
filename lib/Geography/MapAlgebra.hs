@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo #-}
+{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -208,7 +208,7 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , fvolume, fgradient, faspect, faspect'
+  , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
   -- * Utilities
   , leftPseudo, tau
   ) where
@@ -758,7 +758,7 @@ ignores _         = []
 -- | Directions that neighbourhood foci can be connected by. See `flinkage`
 -- and `flength`.
 data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Enum, Show)
 
 data Pair = Pair !Ix2 !Direction
 
@@ -1007,15 +1007,13 @@ facets f = do
   bl <- realToFrac <$> f (1  :. -1)
   bo <- realToFrac <$> f (1  :. 0)
   br <- realToFrac <$> f (1  :. 1)
-  pure [ (tl + up + le + fo) / 4
-       , (up + fo) / 2
-       , (up + tr + fo + ri) / 4
-       , (le + fo) / 2
-       , fo
-       , (fo + ri) / 2
-       , (le + fo + bl + bo) / 4
-       , (fo + bo) / 2
-       , (fo + ri + bo + br) / 4 ]
+  pure $ let nw = (tl + up + le + fo) / 4
+             ne = (up + tr + fo + ri) / 4
+             sw = (le + fo + bl + bo) / 4
+             se = (fo + ri + bo + br) / 4
+         in [ nw, (up + fo) / 2, ne
+            , (le + fo) / 2, fo, (fo + ri) / 2
+            , sw, (fo + bo) / 2, se ]
 
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Real a, Fractional b, Default a) => ([b] -> c) -> Stencil Ix2 a c
@@ -1041,10 +1039,10 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- | Focal Gradient - a measurement of surficial slope for each pixel relative to
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
-fgradient :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
+fgradient :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
 fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
 
--- | One full rotation of the unit circle.
+-- | \(\tau\). One full rotation of the unit circle.
 tau :: Double
 tau = 6.283185307179586
 
@@ -1077,15 +1075,77 @@ faspect :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster D
 faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = case normal' vs of
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
-                   | otherwise -> Just . acos $ LA.dot (LA.normalize $ zcoord 0 n) axis
+                   | otherwise -> Just $ angle (LA.normalize $ zcoord 0 n) axis
         axis = LA.vector [1, 0, 0]
-
--- | Approximate Equality.
-(=~) :: Double -> Double -> Bool
-a =~ b = abs (a - b) < 0.000001
 
 -- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
 faspect' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
-  where f vs = acos $ LA.dot (LA.normalize $ zcoord 0 $ normal' vs) axis
+  where f vs = angle (LA.normalize $ zcoord 0 $ normal' vs) axis
         axis = LA.vector [1, 0, 0]
+
+-- | Approximate Equality.
+(=~) :: Double -> Double -> Bool
+a =~ b = abs (a - b) < 0.0061359  -- Approximately (tau / 1024), 1024th of the unit circle.
+
+-- | Given two normalized (length 1) vectors in R3, find the angle between them.
+angle :: LA.Vector Double -> LA.Vector Double -> Double
+angle u v = acos $ LA.dot u v
+
+-- | Focal Drainage - downstream portion. This indicates the one or more compass
+-- directions of steepest descent from each location. Appropriate as the input
+-- to `fupstream`.
+--
+-- __Note:__ "Peaks" will not flow equally in all 8 directions. Consider this
+-- neighbourhood:
+--
+-- @
+-- [ 1 1 1 ]
+-- [ 1 3 1 ]
+-- [ 1 1 1 ]
+-- @
+--
+-- According to the rules in GaCM for calculating the intermediate surficial "facet"
+-- points for the focus, 3, we arrive at the following facet height matrix:
+--
+-- @
+-- [ 1.5 2 1.5 ]
+-- [  2  3  2  ]
+-- [ 1.5 2 1.5 ]
+-- @
+--
+-- With these numbers it's clear that the corners would yield a steeper angle,
+-- so our resulting `S.Set` `Direction` would only contain the directions
+-- of the diagonals.
+fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c (S.Set Direction)
+fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
+
+downstream :: [Double] -> S.Set Direction
+downstream [nw, no, ne, we, fo, ea, sw, so, se] = snd . foldl' f (fmap S.singleton $ head angles) $ tail angles
+  where fo'  = LA.vector [0, 0, fo]
+        axis = LA.vector [0, 0, -1]
+        f (!curr, !s) (!a, !d) | a =~ curr = (curr, S.insert d s)
+                               | a <  curr = (a, S.singleton d)
+                               | otherwise = (curr, s)
+        angles = [ (g [-0.5, -0.5, nw], NorthWest)
+                 , (g [-0.5, 0, no],    North)
+                 , (g [-0.5, 0.5, ne],  NorthEast)
+                 , (g [0, -0.5, we],    West)
+                 , (g [0, 0.5, ea],     East)
+                 , (g [0.5, -0.5, sw],  SouthWest)
+                 , (g [0.5, 0, so],     South)
+                 , (g [0.5, 0.5, se],   SouthEast) ]
+        g v = angle axis . LA.normalize $ LA.vector v - fo'
+downstream _ = S.empty
+
+-- | Focal Drainage - upstream portion. This indicates the one of more compass
+-- directions from which liquid would flow into each surface location.
+-- See also `fdownstream`.
+fupstream :: Raster u p r c (S.Set Direction) -> Raster DW p r c (S.Set Direction)
+fupstream (Raster a) = undefined
+
+-- dtow :: [Direction] -> Word8
+-- dtow = undefined
+
+-- wtod :: Word8 -> [Direction]
+-- wtod = undefined
