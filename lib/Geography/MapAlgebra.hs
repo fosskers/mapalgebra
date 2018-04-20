@@ -1,7 +1,7 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies, DeriveGeneric, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -209,13 +209,15 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , fvolume, fgradient, faspect, faspect', fdownstream, fdownstream', fupstream
+  , Drain(..), direction, directions, drainage
+  , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
   -- * Utilities
   , leftPseudo, tau
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData)
+import           Data.Bits (testBit)
 import           Data.Bool (bool)
 import           Data.Default (Default, def)
 import           Data.Foldable
@@ -760,7 +762,8 @@ ignores _         = []
 -- | Directions that neighbourhood foci can be connected by. See `flinkage`
 -- and `flength`.
 data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
-  deriving (Eq, Ord, Enum, Show, Generic, NFData)
+  deriving stock    (Eq, Ord, Enum, Show, Generic)
+  deriving anyclass (NFData)
 
 data Pair = Pair !Ix2 !Direction
 
@@ -1086,19 +1089,57 @@ faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = angle (LA.normalize $ zcoord 0 $ normal' vs) axis
         axis = LA.vector [1, 0, 0]
 
--- | Approximate Equality.
+-- | Approximate Equality. Considers two `Double` to be equal if they are
+-- less than \(/tau / 1024\) apart.
 (=~) :: Double -> Double -> Bool
-a =~ b = abs (a - b) < 0.0061359  -- Approximately (tau / 1024), 1024th of the unit circle.
+a =~ b = abs (a - b) < 0.0061359
 
 -- | Given two normalized (length 1) vectors in R3, find the angle between them.
 angle :: LA.Vector Double -> LA.Vector Double -> Double
 angle u v = acos $ LA.dot u v
 
+-- | The main type for `fdownstream` and `fupstream`, used to calculate
+-- Focal Drainage. This scheme for encoding drainage patterns is described
+-- on page 81 of GaCM.
+--
+-- ==== __Full Explanation__
+--
+-- Fluid can flow in or out of a square pixel in one of 256 ways. Imagine a pit,
+-- whose neighbours are all higher in elevation: liquid would flow in from all
+-- eight compass directions, but no liquid would flow out. Consider then
+-- a neighbourhood of random heights - fluid might flow in or out of the focus
+-- in any permutation of the eight directions.
+--
+-- The scheme for encoding these permutations in a single `Word8` as described
+-- in GaCM is this:
+--
+-- Flow in a particular direction is represented by a power of 2:
+--
+-- @
+-- [  1   2   4  ]
+-- [  8       16 ]
+-- [ 32  64  128 ]
+-- @
+--
+-- Direction values are summed to make the encoding.
+-- If there were drainage to the North, East, and SouthEast, we'd see a sum
+-- of \(2 + 16 + 128 = 146\) to uniquely represent this.
+--
+-- Analysing a drainage pattern from a `Drain` is just as easy: check if the bit corresponding
+-- to the desired direction is flipped. The `direction` function handles this.
+newtype Drain = Drain { _drain :: Word8 }
+  deriving stock    (Eq, Ord, Show, Generic)
+  deriving newtype  (Storable)
+  deriving anyclass (NFData)
+
+instance Default Drain where
+  def = Drain 0
+
 -- | Focal Drainage - downstream portion. This indicates the one or more compass
 -- directions of steepest descent from each location. Appropriate as the input
 -- to `fupstream`.
 --
--- __Note:__ "Peaks" will not flow equally in all 8 directions. Consider this
+-- __Note:__ Peak-like surfaces will not flow equally in all 8 directions. Consider this
 -- neighbourhood:
 --
 -- @
@@ -1117,38 +1158,15 @@ angle u v = acos $ LA.dot u v
 -- @
 --
 -- With these numbers it's clear that the corners would yield a steeper angle,
--- so our resulting `S.Set` `Direction` would only contain the directions
+-- so our resulting `Drain` would only contain the directions
 -- of the diagonals.
-fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c (S.Set Direction)
+fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Drain
 fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
 
-downstream :: [Double] -> S.Set Direction
+downstream :: [Double] -> Drain
 downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
-  | length (filter (<= fo) ds) == 1 = S.empty  -- A pit. All neighbours are higher.
-  | otherwise = snd . foldl' f (S.singleton <$> head angles) $ tail angles
-  where f (!curr, !s) (!a, !d) | a =~ curr = (curr, S.insert d s)
-                               | a >  curr = (a, S.singleton d)
-                               | otherwise = (curr, s)
-        angles = [ (fo - nw, NorthWest)
-                 , (fo - no, North)
-                 , (fo - ne, NorthEast)
-                 , (fo - we, West)
-                 , (fo - ea, East)
-                 , (fo - sw, SouthWest)
-                 , (fo - so, South)
-                 , (fo - se, SouthEast) ]
-downstream _ = S.empty
-
--- | Like `fdownstream`, but encodes drainage patterns using the scheme described
--- on page 81 of GaCM. TODO Explain it here anyway!
-fdownstream' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Word8
-fdownstream' (Raster a) = Raster $ mapStencil (facetStencil downstream') a
-{-# INLINE fdownstream' #-}
-
-downstream' :: [Double] -> Word8
-downstream' ds@[nw, no, ne, we, fo, ea, sw, so, se]
-  | length (filter (<= fo) ds) == 1 = 0  -- A pit. All neighbours are higher.
-  | otherwise = snd . foldl' f (head angles) $ tail angles
+  | length (filter (<= fo) ds) == 1 = Drain 0  -- A pit. All neighbours are higher.
+  | otherwise = Drain . snd . foldl' f (head angles) $ tail angles
   where f (!curr, !s) (!a, !d) | a =~ curr = (curr, s + d)
                                | a >  curr = (a, d)
                                | otherwise = (curr, s)
@@ -1160,18 +1178,49 @@ downstream' ds@[nw, no, ne, we, fo, ea, sw, so, se]
                  , (fo - sw, 32)
                  , (fo - so, 64)
                  , (fo - se, 128) ]
-downstream' _ = 0
+downstream _ = Drain 0
 
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
 -- directions from which liquid would flow into each surface location.
 -- See also `fdownstream`.
-fupstream :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c (S.Set Direction)
-fupstream (Raster a) = Raster $ mapStencil (percStencil f $ Fill S.empty) a
-  where f _ vs = S.fromList . P.map fst . filter (\(d, s) -> S.member d s) $ P.zip ds vs
-        ds = [ SouthEast, South, SouthWest, East, West, NorthEast, North, NorthWest ]
+fupstream :: Manifest u Ix2 Drain => Raster u p r c Drain -> Raster DW p r c Drain
+fupstream (Raster a) = Raster $ mapStencil (percStencil f $ Fill (Drain 0)) a
+  where f _ [nw, no, ne, we, ea, sw, so, se] = Drain $ bool 0 1 (testBit (_drain nw) 7)
+                                               + bool 0 2   (testBit (_drain no) 6)
+                                               + bool 0 4   (testBit (_drain ne) 5)
+                                               + bool 0 8   (testBit (_drain we) 4)
+                                               + bool 0 16  (testBit (_drain ea) 3)
+                                               + bool 0 32  (testBit (_drain sw) 2)
+                                               + bool 0 64  (testBit (_drain so) 1)
+                                               + bool 0 128 (testBit (_drain se) 0)
+        f _ _ = Drain 0
 
--- dtow :: [Direction] -> Word8
--- dtow = undefined
+-- | Does a given `Drain` indicate flow in a certain `Direction`?
+direction :: Direction -> Drain -> Bool
+direction dir (Drain d) = case dir of
+  NorthWest -> testBit d 0
+  North     -> testBit d 1
+  NorthEast -> testBit d 2
+  West      -> testBit d 3
+  East      -> testBit d 4
+  SouthWest -> testBit d 5
+  South     -> testBit d 6
+  SouthEast -> testBit d 7
 
--- wtod :: Word8 -> [Direction]
--- wtod = undefined
+-- | All `Direction`s that a `Drain` indicates flow toward.
+directions :: Drain -> S.Set Direction
+directions d = S.fromList $ foldl' (\acc dir -> bool acc (dir : acc) $ direction dir d) [] dirs
+  where dirs = [NorthWest, North, NorthEast, West, East, SouthWest, South, SouthEast]
+
+-- | The opposite of `directions`.
+drainage :: S.Set Direction -> Drain
+drainage = Drain . S.foldl' f 0
+  where f acc d = case d of
+          NorthWest -> acc + 1
+          North     -> acc + 2
+          NorthEast -> acc + 4
+          West      -> acc + 8
+          East      -> acc + 16
+          SouthWest -> acc + 32
+          South     -> acc + 64
+          SouthEast -> acc + 128

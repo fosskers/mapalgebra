@@ -4,7 +4,6 @@ module Main where
 
 import           Criterion.Main
 import           Data.Massiv.Array as A
-import           Data.Monoid ((<>))
 import           Data.Word (Word8)
 import           Geography.MapAlgebra
 import qualified Numeric.LinearAlgebra as LA
@@ -83,8 +82,10 @@ main = do
       --   , bench "Safe"   $ nf (_array . strict B . faspect) img
       --   ]
       , bgroup "fdownstream"
-        [ bench "Set"  $ nf (_array . strict B . fdownstream) img
-        , bench "Word" $ nf (_array . strict P . fdownstream') img
+        [ bench "Word" $ nf (_array . strict S . fdownstream) img
+        ]
+      , bgroup "fupstream"
+        [ bench "Word" $ nf (_array . strict S . fupstream . strict S . fdownstream) img
         ]
       ]
     ]

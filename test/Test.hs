@@ -327,31 +327,31 @@ faspectEast = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?
         actual = strict B . faspect' . fromRight . fromVector Seq $ U.fromList ([3,2,1,3,2,1,3,2,1] :: [Double])
 
 fdownstream4 :: Assertion
-fdownstream4 = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [North,South,East,West]
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([3,1,3,1,2,1,3,1,3] :: [Double])
+fdownstream4 = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [North,South,East,West])
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([3,1,3,1,2,1,3,1,3] :: [Double])
 
 fdownstreamFlat :: Assertion
-fdownstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [East ..]
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
+fdownstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [East ..])
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fdownstreamPeak :: Assertion
-fdownstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [NorthEast, NorthWest, SouthWest, SouthEast]
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
+fdownstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [NorthEast, NorthWest, SouthWest, SouthEast])
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
 
 fdownstreamPit :: Assertion
-fdownstreamPit = (flip index' (1 :. 1) $ _array actual) @?= S.empty
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([2,2,2,2,1,2,2,2,2] :: [Double])
+fdownstreamPit = (flip index' (1 :. 1) $ _array actual) @?= Drain 0
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([2,2,2,2,1,2,2,2,2] :: [Double])
 
 fupstreamFlat :: Assertion
-fupstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= S.fromList [East ..]
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fupstream . strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
+fupstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [East ..])
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fupstream . strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fupstreamPeak :: Assertion
-fupstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= S.empty
-  where actual :: Raster B p 3 3 (S.Set Direction)
-        actual = strict B . fupstream . strict B . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
+fupstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= Drain 0
+  where actual :: Raster S p 3 3 Drain
+        actual = strict S . fupstream . strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
