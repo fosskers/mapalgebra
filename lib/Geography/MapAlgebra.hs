@@ -216,7 +216,7 @@ module Geography.MapAlgebra
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
-import           Control.DeepSeq (NFData)
+import           Control.DeepSeq (NFData(..), deepseq)
 import           Data.Bits (testBit)
 import           Data.Bool (bool)
 import           Data.Default (Default, def)
@@ -1128,12 +1128,14 @@ angle u v = acos $ LA.dot u v
 -- Analysing a drainage pattern from a `Drain` is just as easy: check if the bit corresponding
 -- to the desired direction is flipped. The `direction` function handles this.
 newtype Drain = Drain { _drain :: Word8 }
-  deriving stock    (Eq, Ord, Show, Generic)
-  deriving newtype  (Storable)
-  deriving anyclass (NFData)
+  deriving stock   (Eq, Ord, Show)
+  deriving newtype (Storable)
 
 instance Default Drain where
   def = Drain 0
+
+instance NFData Drain where
+  rnf (Drain a) = deepseq a ()
 
 -- | Focal Drainage - downstream portion. This indicates the one or more compass
 -- directions of steepest descent from each location. Appropriate as the input
