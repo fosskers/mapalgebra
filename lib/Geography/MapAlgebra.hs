@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns #-}
+{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns, UnboxedTuples #-}
 {-# LANGUAGE DerivingStrategies, DeriveGeneric, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
 
 -- |
@@ -1129,7 +1129,7 @@ angle u v = acos $ LA.dot u v
 -- to the desired direction is flipped. The `direction` function handles this.
 newtype Drain = Drain { _drain :: Word8 }
   deriving stock   (Eq, Ord, Show)
-  deriving newtype (Storable)
+  deriving newtype (Storable, Prim)
 
 instance Default Drain where
   def = Drain 0
