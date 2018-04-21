@@ -17,6 +17,7 @@ main = do
   img <- fileY
   let uv = U.fromList ([1..65536] :: [Int])
       bv = V.fromList ([1..65536] :: [Int])
+      cr = greenRed [25, 50, 75, 100, 125, 150, 175, 200, 225, 255]
   defaultMain
     [ bgroup "Raster Creation"
       [ bench "constant 256x256"     $ nf (_array . constantB) 5
@@ -28,7 +29,12 @@ main = do
       ]
     , bgroup "IO"
       [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "/home/colin/code/haskell/mapalgebra/512x512.tif")
-      , bench "fromGray 512x512" $ nfIO (_array <$> fileY)
+      , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
+      -- , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "/home/colin/code/haskell/mapalgebra/gray512.tif")
+      ]
+    , bgroup "Colouring"
+      [ bench "classify 512x512"  $ nf (_array . strict S . classify invisible cr . lazy) img
+      , bench "grayscale 512x512" $ nf (_array . strict S . grayscale . lazy) img
       ]
       -- [ bgroup "Grayscale"
         -- [
@@ -179,6 +185,12 @@ zing = LA.matrix 3 [ -0.5, -0.5, 1
 -- rgba1024 :: Image PixelRGBA8
 -- rgba1024 = pixelImg 1024
 
+gray :: FilePath -> IO (Raster S p 512 512 Word8)
+gray fp = do
+  i <- fromGray fp
+  case i of
+    Left err  -> putStrLn err *> pure (constant S Par 8)
+    Right img -> pure img
 
 -- fileY :: IO (Raster S p 1753 1760 Word8)
 fileY :: IO (Raster S p 512 512 Word8)
