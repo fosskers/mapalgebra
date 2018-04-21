@@ -596,8 +596,8 @@ lmax :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raste
 lmax = zipWith P.max
 
 -- | Averages the values per-index of all `Raster`s in a collection.
-lmean :: (Fractional a, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c a
-lmean (a :| as) = (/ len) <$> foldl' (+) a as
+lmean :: (Real a, Fractional b, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c b
+lmean (a :| as) = (\n -> realToFrac n / len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 
 -- | The count of unique values at each shared index.
@@ -628,12 +628,12 @@ mino = fst . g . f
 
 -- | A measure of how spread out a dataset is. This calculation will fail
 -- with `Nothing` if a length 1 list is given.
-lvariance :: (KnownNat r, KnownNat c, Fractional a) => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c a)
+lvariance :: (Real a, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c Double)
 lvariance (_ :| []) = Nothing
 lvariance rs = Just (f <$> sequenceA rs)
-  where len = fromIntegral $ length rs
-        avg ns = (/ len) $ P.sum ns  -- TODO: Use foldl'
-        f os@(n :| ns) = foldl' (\acc m -> acc + ((m - av) ^ 2)) ((n - av) ^ 2) ns / (len - 1)
+  where len = realToFrac $ length rs
+        avg ns = (\z -> realToFrac z / len) $ foldl' (+) 0 ns
+        f os@(n :| ns) = foldl' (\acc m -> acc + ((realToFrac m - av) ^ 2)) ((realToFrac n - av) ^ 2) ns / (len - 1)
           where av = avg os
 
 -- Old implementation that was replaced with `sequenceA` usage above. I wonder if this is faster?
