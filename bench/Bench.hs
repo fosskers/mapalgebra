@@ -26,7 +26,10 @@ main = do
       , bench "fromVector Unboxed Int - 256x256" $ nf (_array . vectorB) uv
       , bench "fromVector Boxed Int - 256x256"   $ nf (_array . vectorB') bv
       ]
-    , bgroup "IO" []
+    , bgroup "IO"
+      [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "/home/colin/code/haskell/mapalgebra/512x512.tif")
+      , bench "fromGray 512x512" $ nfIO (_array <$> fileY)
+      ]
       -- [ bgroup "Grayscale"
         -- [
       --   bench "encodePng - 256"  $ nf encodePng gray256
@@ -123,6 +126,9 @@ vectorB = fromRight . fromVector Par
 
 vectorB' :: V.Vector Int -> Raster B p 256 256 Int
 vectorB' = fromRight . fromVector Par
+
+rgbaB :: FilePath -> IO (Raster S p 512 512 Word8)
+rgbaB = fmap (strict S . _red . fromRight) . fromRGBA
 
 zing :: LA.Matrix Double
 zing = LA.matrix 3 [ -0.5, -0.5, 1
