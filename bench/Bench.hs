@@ -66,12 +66,27 @@ main = do
     --   , bench "Word -> Double via realToFrac"   $ nf (realToFrac @Word8 @Double) 5
     --   ]
     , bgroup "Focal Operations"
-      [ bench "fsum"  $ nf (_array . strict S . fsum) img
-      -- , bench "fmean" $ nf (_array . strict S . fmean) img
-      -- , bgroup "faspect"
-      --   [ bench "Unsafe" $ nf (_array . strict S . faspect') img
-      --   , bench "Safe"   $ nf (_array . strict B . faspect) img
-      --   ]
+      [ bench "fsum"        $ nf (_array . strict S . fsum) img
+      , bench "fmean"       $ nf (_array . strict S . fmean @Word8 @Double) img
+      , bench "fmax"        $ nf (_array . strict S . fmax) img
+      , bench "fmin"        $ nf (_array . strict S . fmin) img
+      , bench "fmajority"   $ nf (_array . strict S . fmajority) img
+      , bench "fminority"   $ nf (_array . strict S . fminority) img
+      , bench "fvariety"    $ nf (_array . strict S . fvariety) img
+      , bench "fpercentage" $ nf (_array . strict S . fpercentage) img
+      , bench "fpercentile" $ nf (_array . strict S . fpercentile) img
+      , bench "flinkage"    $ nf (_array . strict B . flinkage) img
+      , bench "flength"     $ nf (_array . strict S . flength . strict B . flinkage) img
+      , bench "fpartition"  $ nf (_array . strict B . fpartition) img
+      , bench "fshape"      $ nf (_array . strict B . fshape) img
+      , bench "ffrontage"   $ nf (_array . strict S . ffrontage . strict B . fshape) img
+      , bench "farea"       $ nf (_array . strict S . farea . strict B . fshape) img
+      , bench "fvolume"     $ nf (_array . strict S . fvolume @Word8 @Double) img
+      , bench "fgradient"   $ nf (_array . strict S . fgradient) img
+      , bgroup "faspect"
+        [ bench "Unsafe" $ nf (_array . strict S . faspect') img
+        , bench "Safe"   $ nf (_array . strict B . faspect) img
+        ]
       , bgroup "fdownstream"
         [ bench "Word" $ nf (_array . strict S . fdownstream) img
         ]
