@@ -665,12 +665,10 @@ fclassify f e (Raster a) = Raster $ mapStencil (groupStencil f e) a
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fsum (Raster a) = Raster $ mapStencil sumStencil a
-{-# INLINE fsum #-}
 
 -- | Focal Mean.
-fmean :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmean = fmap (/ 9) . fsum
-{-# INLINE fmean #-}
+fmean :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
+fmean = fmap (\n -> realToFrac n / 9) . fsum
 
 -- TODO: Use `NonEmpty`?
 groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
@@ -681,27 +679,22 @@ groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ix
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmax = fclassify P.maximum Edge
-{-# INLINE fmax #-}
 
 -- | Focal Minimum.
 fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmin = fclassify P.minimum Edge
-{-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
 fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
 fvariety = fclassify (length . L.nub) Edge
-{-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmajority = fclassify majo Continue
-{-# INLINE fmajority #-}
 
 -- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fminority = fclassify mino Continue
-{-# INLINE fminority #-}
 
 -- | TODO: Rename this.
 percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
@@ -815,6 +808,9 @@ instance Default a => Default (Cell a) where
   def = Cell def (Corners Open Open Open Open)
   {-# INLINE def #-}
 
+instance NFData a => NFData (Cell a) where
+  rnf (Cell a cs) = a `deepseq` cs `deepseq` ()
+
 -- | A layout of the areal conditions of a single `Raster` pixel.
 -- It describes whether each pixel corner is occupied by the same
 -- "areal zone" as the pixel centre.
@@ -822,6 +818,9 @@ data Corners a = Corners { _topLeft     :: !(Surround a)
                          , _bottomLeft  :: !(Surround a)
                          , _bottomRight :: !(Surround a)
                          , _topRight    :: !(Surround a) } deriving (Eq, Show)
+
+instance NFData a => NFData (Corners a) where
+  rnf (Corners tl bl br tr) = tl `deepseq` bl `deepseq` br `deepseq` tr `deepseq` ()
 
 -- | A state of surroundedness of a pixel corner.
 -- For the examples below, the bottom-left pixel is considered the focus and
@@ -857,6 +856,13 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                                -- [ 0 1 ]
                                -- @
   deriving (Eq, Ord, Show)
+
+instance NFData a => NFData (Surround a) where
+  rnf s = case s of
+    Complete a -> a `deepseq` ()
+    OneSide    -> ()
+    Open       -> ()
+    RightAngle -> ()
 
 -- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
 -- what `Surround` relationship does the focus have with the other pixels?
@@ -959,20 +965,20 @@ farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
 
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
 -- represents elevation in some way.
-fvolume :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fvolume :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
 fvolume (Raster a) = Raster $ mapStencil volStencil a
 
-volStencil :: (Fractional a, Default a) => Stencil Ix2 a a
+volStencil :: (Real a, Fractional b, Default a) => Stencil Ix2 a b
 volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
-  tl <- f (-1 :. -1)
-  up <- f (-1 :. 0)
-  tr <- f (-1 :. 1)
-  le <- f (0  :. -1)
-  fo <- f (0  :. 0)
-  ri <- f (0  :. 1)
-  bl <- f (1  :. -1)
-  bo <- f (1  :. 0)
-  br <- f (1  :. 1)
+  tl <- realToFrac <$> f (-1 :. -1)
+  up <- realToFrac <$> f (-1 :. 0)
+  tr <- realToFrac <$> f (-1 :. 1)
+  le <- realToFrac <$> f (0  :. -1)
+  fo <- realToFrac <$> f (0  :. 0)
+  ri <- realToFrac <$> f (0  :. 1)
+  bl <- realToFrac <$> f (1  :. -1)
+  bo <- realToFrac <$> f (1  :. 0)
+  br <- realToFrac <$> f (1  :. 1)
   pure $
     let nw = (tl + up + le + fo) / 4
         no = (up + fo) / 2
