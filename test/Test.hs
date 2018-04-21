@@ -24,10 +24,7 @@ import           Test.Tasty.QuickCheck
 ---
 
 main :: IO ()
-main = do
-  -- tif <- BS.readFile "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
-  -- defaultMain $ suite tif
-  defaultMain suite
+main = defaultMain suite
 
 suite :: TestTree
 suite = testGroup "Unit Tests"
@@ -37,9 +34,6 @@ suite = testGroup "Unit Tests"
     , testCase "Image Reading (RGBA)"   $ do
         i <- fileRGBA
         fmap (getComp . _array . _red) i @?= Right Par
-    -- , testCase "Image Reading (Gray)"   $ do
-    --     i <- fileY
-    --     fmap (getComp . _array) i @?= Right Par
     ]
   , testGroup "Typeclass Ops"
     [ testCase "(==)" $ assertBool "(==) doesn't work" (small == small)
@@ -121,24 +115,8 @@ lazybig = constant D Par 5
 -- bog :: Raster P p 65536 65536 Word8
 -- bog = constant P Par 10
 
--- | Should have two rows and 3 columns.
--- arr :: Array U Ix2 Int
--- arr = A.fromVector Seq (2 :. 3) $ U.fromList [0..5]
-
--- indices :: Raster D p 256 256 Int
--- indices = fromFunction D Seq (\(r :. c) -> (r * 10) + c)
-
--- zoop :: Raster D p 256 256 Int
--- zoop = fromFunction D Seq (\(r :. c) -> r * c)
-
-fileRGBA :: IO (Either String (RGBARaster p 1753 1760 Word8))
-fileRGBA = fromRGBA "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
-
--- fileY :: IO (Either String (Raster D p 1753 1760 Word8))
--- fileY = fromGray "/home/colin/code/haskell/mapalgebra/LC81750172014163LGN00_LOW5.TIF"
-
--- colourIt :: Raster D p 256 256 Int -> Image D RGBA Word8
--- colourIt = _array . classify invisible (greenRed [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000])
+fileRGBA :: IO (Either String (RGBARaster p 512 512 Word8))
+fileRGBA = fromRGBA "data/512x512.tif"
 
 singlePoint :: Assertion
 singlePoint = actual @?= expected

@@ -32,9 +32,9 @@ main = do
       , bench "fromVector Boxed Int - 256x256"   $ nf (_array . vectorB') bv
       ]
     , bgroup "IO"
-      [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "/home/colin/code/haskell/mapalgebra/512x512.tif")
+      [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "data/512x512.tif")
       , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
-      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "/home/colin/code/haskell/mapalgebra/gray512.tif")
+      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "data/gray512.tif")
       ]
     , bgroup "Colouring"
       [ bench "classify 512x512"  $ nf (_array . strict S . classify invisible cr . lazy) img
@@ -180,14 +180,14 @@ gray fp = do
 -- fileY :: IO (Raster S p 1753 1760 Word8)
 fileY :: IO (Raster S p 512 512 Word8)
 fileY = do
-  i <- fromGray "/home/colin/code/haskell/mapalgebra/512x512.tif"
+  i <- fromGray "data/512x512.tif"
   case i of
     Left err  -> putStrLn err *> pure (constant S Par 8)
     Right img -> pure img
 
 fileRGB :: IO (RGBARaster p 512 512 Word8)
 fileRGB = do
-  i <- fromRGBA "/home/colin/code/haskell/mapalgebra/512x512.tif"
+  i <- fromRGBA "data/512x512.tif"
   case i of
     Left err  -> error err
     Right img -> pure img

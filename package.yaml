@@ -11,6 +11,7 @@ category:            Geography
 
 extra-source-files:
   - README.md
+  - data/*
 
 ghc-options:
   - -fwarn-unused-imports
