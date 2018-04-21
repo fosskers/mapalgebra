@@ -236,6 +236,7 @@ import           Data.Semigroup
 import qualified Data.Set as S
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
+import qualified Data.Vector.Storable as VS
 import           Data.Word
 import           GHC.Generics (Generic)
 import           GHC.TypeLits
@@ -495,7 +496,7 @@ fromGray fp = do
       (r :. c) = size img
   pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
   where f :: Image S Y a -> Raster S p r c a
-        f (delay -> img) = strict S . Raster $ (\(PixelY a) -> a) <$> img
+        f img = Raster . A.fromVector (getComp img) (size img) . VS.unsafeCast $ A.toVector img
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: Pixel RGBA Word8

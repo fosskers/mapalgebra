@@ -34,7 +34,7 @@ main = do
     , bgroup "IO"
       [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "/home/colin/code/haskell/mapalgebra/512x512.tif")
       , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
-      -- , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "/home/colin/code/haskell/mapalgebra/gray512.tif")
+      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "/home/colin/code/haskell/mapalgebra/gray512.tif")
       ]
     , bgroup "Colouring"
       [ bench "classify 512x512"  $ nf (_array . strict S . classify invisible cr . lazy) img
