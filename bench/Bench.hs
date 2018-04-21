@@ -4,7 +4,9 @@ module Main where
 
 import           Criterion.Main
 import           Data.Massiv.Array as A
-import           Data.Word (Word8)
+import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
+import           Data.Word
 import           Geography.MapAlgebra
 import qualified Numeric.LinearAlgebra as LA
 
@@ -13,10 +15,20 @@ import qualified Numeric.LinearAlgebra as LA
 main :: IO ()
 main = do
   img <- fileY
+  let uv = U.fromList ([1..65536] :: [Int])
+      bv = V.fromList ([1..65536] :: [Int])
   defaultMain
-    [ bgroup "Encoding"
-      [ bgroup "Grayscale"
-        [
+    [ bgroup "Raster Creation"
+      [ bench "constant 256x256"     $ nf (_array . constantB) 5
+      , bench "constant 512x512"     $ nf (_array . constantB') 5
+      , bench "fromFunction 256x256" $ nf (_array . functionB) (\(r :. c) -> r * c)
+      , bench "fromFunction 512x512" $ nf (_array . functionB') (\(r :. c) -> r * c)
+      , bench "fromVector Unboxed Int - 256x256" $ nf (_array . vectorB) uv
+      , bench "fromVector Boxed Int - 256x256"   $ nf (_array . vectorB') bv
+      ]
+    , bgroup "IO" []
+      -- [ bgroup "Grayscale"
+        -- [
       --   bench "encodePng - 256"  $ nf encodePng gray256
       -- , bench "encodePng - 1024" $ nf encodePng gray1024
 
@@ -38,9 +50,9 @@ main = do
       -- , bench "TIFF 1024 Constant"    $ nf (encodeTiff . grayscale) (constant 125 :: Raster p 1024 1024 Word8)
       -- , bench "TIFF 1024 fromList"    $ nf (encodeTiff . grayscale) big
       -- , bench "TIFF 1024 fromUnboxed" $ nf (encodeTiff . grayscale) bigV
-        ]
-      , bgroup "RGBA"
-        [
+      --   ]
+      -- , bgroup "RGBA"
+      --   [
         -- bench "generateImage - 256"  $ nf pixelImg 256
       -- , bench "generateImage - 1024" $ nf pixelImg 1024
       -- , bench "encodePng - 256"  $ nf encodePng rgba256
@@ -53,8 +65,8 @@ main = do
       -- , bench "rgba - 256 - 2 ops"  $ nf (\r -> encodePng . rgba . classify invisible cmap $ r + r + r) small
       -- , bench "rgba - 1024" $ nf (encodePng . rgba . classify invisible cmap) big
       -- , bench "rgba - 1024 - 2 ops"  $ nf (\r -> encodePng . rgba . classify invisible cmap $ r + r + r) big
-        ]
-      ]
+      --   ]
+      -- ]
     -- , bgroup "Massiv Operations"
     --   [ bench "strict S . lazy" $ nf (_array . strict S . lazy) img
     --   , bench "strict U . lazy" $ nf (_array . strict U . lazy) img
@@ -89,6 +101,28 @@ main = do
         ]
       ]
     ]
+
+fromRight :: Either a b -> b
+fromRight (Right b) = b
+fromRight _ = error "Was Left"
+
+constantB :: Int -> Raster S p 256 256 Int
+constantB = constant S Par
+
+constantB' :: Int -> Raster S p 512 512 Int
+constantB' = constant S Par
+
+functionB :: (Ix2 -> Int) -> Raster S p 256 256 Int
+functionB = fromFunction S Par
+
+functionB' :: (Ix2 -> Int) -> Raster S p 512 512 Int
+functionB' = fromFunction S Par
+
+vectorB :: U.Vector Int -> Raster U p 256 256 Int
+vectorB = fromRight . fromVector Par
+
+vectorB' :: V.Vector Int -> Raster B p 256 256 Int
+vectorB' = fromRight . fromVector Par
 
 zing :: LA.Matrix Double
 zing = LA.matrix 3 [ -0.5, -0.5, 1
@@ -143,7 +177,7 @@ zing = LA.matrix 3 [ -0.5, -0.5, 1
 -- fileY :: IO (Raster S p 1753 1760 Word8)
 fileY :: IO (Raster S p 512 512 Word8)
 fileY = do
-  i <- fromGray "/home/colin/code/haskell/mapalgebra/chatta.tif"
+  i <- fromGray "/home/colin/code/haskell/mapalgebra/512x512.tif"
   case i of
     Left err  -> putStrLn err *> pure (constant S Par 8)
     Right img -> pure img
