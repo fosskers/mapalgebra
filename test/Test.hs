@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeApplications, ImplicitParams #-}
 
-module Main ( main ) where
+module Test ( main ) where
 
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
