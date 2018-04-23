@@ -391,8 +391,13 @@ instance (Num a, KnownNat r, KnownNat c) => Num (Raster D p r c a) where
   {-# INLINE (*) #-}
 
   abs = fmap abs
+  {-# INLINE abs #-}
+
   signum = fmap signum
+  {-# INLINE signum #-}
+
   fromInteger = constant D Par . fromInteger
+  {-# INLINE fromInteger #-}
 
 instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster D p r c a) where
   a / b = zipWith (/) a b

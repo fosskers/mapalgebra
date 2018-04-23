@@ -8,8 +8,8 @@ import           Data.Massiv.Array as A hiding (zipWith)
 import           Data.Monoid ((<>))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
-import           Data.Word
 import           Geography.MapAlgebra
+import           Graphics.ColorSpace
 import qualified Numeric.LinearAlgebra as LA
 import           Prelude hiding (zipWith)
 
@@ -17,8 +17,9 @@ import           Prelude hiding (zipWith)
 
 main :: IO ()
 main = do
-  img  <- fileY
-  rgba <- fileRGB
+  img   <- fileY
+  rgba  <- fileRGB
+  rgbaF <- fileRGB'
   defaultMain
     [ creation
     , io
@@ -28,7 +29,7 @@ main = do
     , hmatrix
     , conversions img
     , focalOps img
-    , compositeOps rgba
+    , compositeOps rgbaF
     ]
 
 creation :: Benchmark
@@ -45,6 +46,7 @@ creation = bgroup "Raster Creation"
 io :: Benchmark
 io = bgroup "IO"
      [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "data/512x512.tif")
+     , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array <$> rgbaB' "data/512x512.tif")
      , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "data/gray512.tif") ]
 
@@ -120,10 +122,10 @@ focalOps img = bgroup "Focal Operations"
                  ]
                ]
 
-compositeOps :: RGBARaster p 512 512 Word8 -> Benchmark
-compositeOps (RGBARaster r' g' _ _) = bgroup "Composite Operations"
-                                      [ bench "NDVI" $ nf (_array . strict S . ndvi g') r'
-                                      ]
+compositeOps :: RGBARaster p 512 512 Double -> Benchmark
+compositeOps i@(RGBARaster r g _ _) = bgroup "Composite Operations"
+                                      [ bench "NDVI" $ nf (_array . strict S . ndvi g) r
+                                      , bench "EVI"  $ nf (_array . strict S . evi) i ]
 
 fromRight :: Either a b -> b
 fromRight (Right b) = b
@@ -149,6 +151,9 @@ vectorB' = fromRight . fromVector Par
 
 rgbaB :: FilePath -> IO (Raster S p 512 512 Word8)
 rgbaB = fmap (strict S . _red . fromRight) . fromRGBA
+
+rgbaB' :: FilePath -> IO (Raster S p 512 512 Double)
+rgbaB' = fmap (strict S . _red . fromRight) . fromRGBA
 
 doubles :: Raster U p 512 512 Double
 doubles = fromRight . fromVector Par $ U.fromList ([1..262144] :: [Double])
@@ -186,5 +191,20 @@ fileRGB = do
     Left err  -> error err
     Right img -> pure img
 
-ndvi :: Raster D p 512 512 Word8 -> Raster D p 512 512 Word8 -> Raster D p 512 512 Double
-ndvi nir red = (realToFrac <$> nir - red) / (realToFrac <$> nir + red)
+fileRGB' :: IO (RGBARaster p 512 512 Double)
+fileRGB' = do
+  i <- fromRGBA "data/512x512.tif"
+  case i of
+    Left err  -> error err
+    Right img -> pure img
+
+-- | See: https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index
+ndvi :: Raster D p 512 512 Double -> Raster D p 512 512 Double -> Raster D p 512 512 Double
+ndvi nir red = (nir - red) / (nir + red)
+
+-- | See: https://en.wikipedia.org/wiki/Enhanced_vegetation_index
+evi :: RGBARaster p 512 512 Double -> Raster D p 512 512 Double
+evi (RGBARaster r g b _) = 2.5 * (numer / denom)
+  where nir   = g  -- fudging it.
+        numer = nir - r
+        denom = nir + (6 * r) - (7.5 * b) + 1
