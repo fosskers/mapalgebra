@@ -21,7 +21,7 @@ main = do
   let uv = U.fromList ([1..65536] :: [Int])
       bv = V.fromList ([1..65536] :: [Int])
       cr = greenRed [25, 50, 75, 100, 125, 150, 175, 200, 225, 255]
-      rs = r' :| [g', b']
+      rs = r' :| [g', b']  -- This may be causing repeated overhead to `lvariety` and friends below!
   defaultMain
     [ bgroup "Raster Creation"
       [ bench "constant 256x256"     $ nf (_array . constantB) 5
@@ -46,9 +46,9 @@ main = do
       , bench "strict P . lazy" $ nf (_array . strict P . lazy) img
       ]
     , bgroup "Local Operations"
-      [ bench "fmap (+ 1) . lazy" $ nf (_array . strict S . fmap (+ 1) . lazy) img
-      , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) img) img
-      , bench "(+)"         $ let i = lazy img in nf (_array . strict S . (+ i)) i
+      [ bench "fmap (+ 17) . lazy" $ nf (_array . strict S . fmap (+ 17) . lazy) img
+      , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) r') g'
+      , bench "(+)"         $ nf (_array . strict S . (+ r')) g'
       , bench "lmax"        $ nf (_array . strict S . lmax img) img
       , bench "lmin"        $ nf (_array . strict S . lmin img) img
       , bench "lmean"       $ nf (_array . strict S . lmean @Word8 @Double) rs
