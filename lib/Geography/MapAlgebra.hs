@@ -701,10 +701,12 @@ fclassify f e (Raster a) = Raster $ mapStencil (groupStencil f e) a
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fsum (Raster a) = Raster $ mapStencil sumStencil a
+{-# INLINE fsum #-}
 
 -- | Focal Mean.
 fmean :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
 fmean = fmap (\n -> realToFrac n / 9) . fsum
+{-# INLINE fmean #-}
 
 -- TODO: Use `NonEmpty`?
 groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
@@ -715,22 +717,27 @@ groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ix
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmax = fclassify P.maximum Edge
+{-# INLINE fmax #-}
 
 -- | Focal Minimum.
 fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmin = fclassify P.minimum Edge
+{-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
 fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
 fvariety = fclassify (length . L.nub) Edge
+{-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fmajority = fclassify majo Continue
+{-# INLINE fmajority #-}
 
 -- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fminority = fclassify mino Continue
+{-# INLINE fminority #-}
 
 -- | TODO: Rename this.
 percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
@@ -745,18 +752,21 @@ percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
 fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentage (Raster a) = Raster $ mapStencil (percStencil f Continue) a
   where f focus vs = fromIntegral (length $ filter (== focus) vs) / 8
+{-# INLINE fpercentage #-}
 
 -- | Focal Percentile - the percentage of neighbourhood values that are /less/
 -- than the neighbourhood focus. Not to be confused with `fpercentage`.
 fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentile (Raster a) = Raster $ mapStencil (percStencil f Continue) a
   where f focus vs = fromIntegral (length $ filter (< focus) vs) / 8
+{-# INLINE fpercentile #-}
 
 -- | Focal Linkage - a description of how each neighbourhood focus is connected
 -- to its neighbours. Foci of equal value to none of their neighbours will have
 -- an empty `S.Set`.
 flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (S.Set Direction)
 flinkage (Raster a) = Raster $ mapStencil linkStencil a
+{-# INLINE flinkage #-}
 
 -- `Fill def` has the highest chance of the edge pixel and the off-the-edge pixel
 -- having a different value. This is until the following is addressed:
@@ -800,6 +810,7 @@ data Pair = Pair !Ix2 !Direction
 -- "pixel units", where 1 is the height/width of one pixel.
 flength :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c Double
 flength (Raster a) = Raster $ mapStencil lenStencil a
+{-# INLINE flength #-}
 
 lenStencil :: Stencil Ix2 (S.Set Direction) Double
 lenStencil = makeStencil (Fill mempty) (3 :. 3) (1 :. 1) $ \f ->
@@ -934,6 +945,7 @@ frontage' a (Corners tl bl br tr) = f tl + f bl + f br + f tr
 -- the top-right edge.
 fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
 fpartition (Raster a) = Raster $ mapStencil partStencil a
+{-# INLINE fpartition #-}
 
 partStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
 partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
@@ -951,6 +963,7 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 -- not `fpartition`.
 fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
 fshape (Raster a) = Raster $ mapStencil arealsStencil a
+{-# INLINE fshape #-}
 
 arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
 arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
@@ -975,6 +988,7 @@ arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
 ffrontage :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
 ffrontage (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
   where f (Cell fo cs) vs = frontage cs + foldl' (\acc (Cell v cs') -> acc + (bool (frontage' fo cs') (frontage cs') $ v == fo)) 0 vs
+{-# INLINE ffrontage #-}
 
 -- | The area of a 1x1 square is 1. It has 8 right-triangular sections,
 -- each with area 1/8. So, here we prefer integer math for its speed,
@@ -998,11 +1012,13 @@ area' fo (Corners tl bl br tr) = f tl + f bl + f br + f tr
 farea :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
 farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
   where f (Cell fo cs) vs = fromIntegral (area cs + foldl' (\acc (Cell v cs') -> acc + (bool (area' fo cs') (area cs') $ v == fo)) 0 vs) / 8
+{-# INLINE farea #-}
 
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
 -- represents elevation in some way.
 fvolume :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
 fvolume (Raster a) = Raster $ mapStencil volStencil a
+{-# INLINE fvolume #-}
 
 volStencil :: (Real a, Fractional b, Default a) => Stencil Ix2 a b
 volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
@@ -1088,6 +1104,7 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
 fgradient :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
 fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
+{-# INLINE fgradient #-}
 
 -- | \(\tau\). One full rotation of the unit circle.
 tau :: Double
@@ -1124,12 +1141,14 @@ faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
                    | otherwise -> Just $ angle (LA.normalize $ zcoord 0 n) axis
         axis = LA.vector [1, 0, 0]
+{-# INLINE faspect #-}
 
 -- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
 faspect' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = angle (LA.normalize $ zcoord 0 $ normal' vs) axis
         axis = LA.vector [1, 0, 0]
+{-# INLINE faspect' #-}
 
 -- | Approximate Equality. Considers two `Double` to be equal if they are
 -- less than \(/tau / 1024\) apart.
@@ -1206,6 +1225,7 @@ instance NFData Drain where
 -- of the diagonals.
 fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Drain
 fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
+{-# INLINE fdownstream #-}
 
 downstream :: [Double] -> Drain
 downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
@@ -1238,6 +1258,7 @@ fupstream (Raster a) = Raster $ mapStencil (percStencil f $ Fill (Drain 0)) a
                                                + bool 0 64  (testBit (_drain so) 1)
                                                + bool 0 128 (testBit (_drain se) 0)
         f _ _ = Drain 0
+{-# INLINE fupstream #-}
 
 -- | Does a given `Drain` indicate flow in a certain `Direction`?
 direction :: Direction -> Drain -> Bool
