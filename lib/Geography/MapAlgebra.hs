@@ -614,27 +614,33 @@ display = displayImage . computeAs S . _array . grayscale
 classify :: (Ord a, Functor f) => b -> M.Map a b -> f a -> f b
 classify d m r = fmap f r
   where f a = maybe d snd $ M.lookupLE a m
+{-# INLINE classify #-}
 
 -- | Finds the minimum value at each index between two `Raster`s.
 lmin :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
 lmin = zipWith P.min
+{-# INLINE lmin #-}
 
 -- | Finds the maximum value at each index between two `Raster`s.
 lmax :: (Ord a, Source u Ix2 a) => Raster u p r c a -> Raster u p r c a -> Raster D p r c a
 lmax = zipWith P.max
+{-# INLINE lmax #-}
 
 -- | Averages the values per-index of all `Raster`s in a collection.
 lmean :: (Real a, Fractional b, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c b
 lmean (a :| as) = (\n -> realToFrac n / len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
+{-# INLINE lmean #-}
 
 -- | The count of unique values at each shared index.
 lvariety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster D p r c a) -> Raster D p r c Int
 lvariety = fmap (length . NE.nub) . sequenceA
+{-# INLINE lvariety #-}
 
 -- | The most frequently appearing value at each shared index.
 lmajority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
 lmajority = fmap majo . sequenceA
+{-# INLINE lmajority #-}
 
 -- | Find the most common value in some `Foldable`.
 majo :: (Foldable t, Ord a) => t a -> a
@@ -646,6 +652,7 @@ majo = fst . g . f
 -- | The least frequently appearing value at each shared index.
 lminority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
 lminority = fmap mino . sequenceA
+{-# INLINE lminority #-}
 
 -- | Find the least common value in some `Foldable`.
 mino :: (Foldable t, Ord a) => t a -> a
@@ -663,6 +670,7 @@ lvariance rs = Just (f <$> sequenceA rs)
         avg ns = (\z -> realToFrac z / len) $ foldl' (+) 0 ns
         f os@(n :| ns) = foldl' (\acc m -> acc + ((realToFrac m - av) ^ 2)) ((realToFrac n - av) ^ 2) ns / (len - 1)
           where av = avg os
+{-# INLINE lvariance #-}
 
 -- Old implementation that was replaced with `sequenceA` usage above. I wonder if this is faster?
 -- Leaving it here in case we feel like comparing later.
