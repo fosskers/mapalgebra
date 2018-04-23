@@ -48,7 +48,9 @@ main = do
     , bgroup "Local Operations"
       [ bench "fmap (+ 17) . lazy" $ nf (_array . strict S . fmap (+ 17) . lazy) img
       , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) r') g'
+      , bench "zipWith (/)" $ nf (_array . strict S . zipWith (/) doubles) doubles
       , bench "(+)"         $ nf (_array . strict S . (+ r')) g'
+      , bench "(/)"         $ nf (_array . strict S . (/ lazy doubles)) (lazy doubles)
       , bench "lmax"        $ nf (_array . strict S . lmax img) img
       , bench "lmin"        $ nf (_array . strict S . lmin img) img
       , bench "lmean"       $ nf (_array . strict S . lmean @Word8 @Double) rs
@@ -98,7 +100,7 @@ main = do
         ]
       ]
     , bgroup "Composite Operations"
-      [ bench "NDVI" $ let i = lazy img in nf (_array . strict S . ndvi i) i
+      [ bench "NDVI" $ nf (_array . strict S . ndvi g') r'
       ]
     ]
 
@@ -126,6 +128,9 @@ vectorB' = fromRight . fromVector Par
 
 rgbaB :: FilePath -> IO (Raster S p 512 512 Word8)
 rgbaB = fmap (strict S . _red . fromRight) . fromRGBA
+
+doubles :: Raster U p 512 512 Double
+doubles = fromRight . fromVector Par $ U.fromList ([1..262144] :: [Double])
 
 zing :: LA.Matrix Double
 zing = LA.matrix 3 [ -0.5, -0.5, 1
