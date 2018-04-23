@@ -459,6 +459,7 @@ fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp 
                   | otherwise = Left $ printf "Expected Pixel Count: %d - Actual: %d" (r * c) (GV.length v)
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
+{-# INLINE fromVector #-}
 
 -- | An RGBA image whose colour bands are distinct. Since each band starts as `D`,
 -- any band you don't use won't consume extra memory.
@@ -487,6 +488,7 @@ fromRGBA fp = do
                                       (Raster $ fmap (\(PixelRGBA _ g _ _) -> g) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
                                       (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
+{-# INLINE fromRGBA #-}
 
 -- TODO: How to unify these two functions?
 
@@ -502,6 +504,7 @@ fromGray fp = do
   pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
   where f :: Image S Y a -> Raster S p r c a
         f img = Raster . A.fromVector (getComp img) (size img) . VS.unsafeCast $ A.toVector img
+{-# INLINE fromGray #-}
 
 -- | An invisible pixel (alpha channel set to 0).
 invisible :: Pixel RGBA Word8
