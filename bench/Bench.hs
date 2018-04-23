@@ -8,6 +8,7 @@ import           Data.Massiv.Array as A hiding (zipWith)
 import           Data.Monoid ((<>))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
+import           GHC.TypeLits
 import           Geography.MapAlgebra
 import           Graphics.ColorSpace
 import qualified Numeric.LinearAlgebra as LA
@@ -199,12 +200,14 @@ fileRGB' = do
     Right img -> pure img
 
 -- | See: https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index
-ndvi :: Raster D p 512 512 Double -> Raster D p 512 512 Double -> Raster D p 512 512 Double
+ndvi :: (KnownNat r, KnownNat c) => Raster D p r c Double -> Raster D p r c Double -> Raster D p r c Double
 ndvi nir red = (nir - red) / (nir + red)
+{-# INLINE ndvi #-}
 
 -- | See: https://en.wikipedia.org/wiki/Enhanced_vegetation_index
-evi :: RGBARaster p 512 512 Double -> Raster D p 512 512 Double
+evi :: (KnownNat r, KnownNat c) => RGBARaster p r c Double -> Raster D p r c Double
 evi (RGBARaster r g b _) = 2.5 * (numer / denom)
   where nir   = g  -- fudging it.
         numer = nir - r
         denom = nir + (6 * r) - (7.5 * b) + 1
+{-# INLINE evi #-}
