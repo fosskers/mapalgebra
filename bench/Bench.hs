@@ -22,7 +22,8 @@ main = do
   rgba  <- fileRGB
   rgbaF <- fileRGB'
   defaultMain
-    [ creation
+    [
+      creation
     , io
     , colouring img
     , massivOps img
@@ -46,8 +47,8 @@ creation = bgroup "Raster Creation"
 
 io :: Benchmark
 io = bgroup "IO"
-     [ bench "fromRGBA 512x512" $ nfIO (_array <$> rgbaB "data/512x512.tif")
-     , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array <$> rgbaB' "data/512x512.tif")
+     [ bench "fromRGBA 512x512" $ nfIO (_array . _red <$> fileRGB)
+     , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array . _red <$> fileRGB')
      , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "data/gray512.tif") ]
 
@@ -64,11 +65,11 @@ massivOps img = bgroup "Massiv Operations"
                 , bench "strict P . lazy" $ nf (_array . strict P . lazy) img ]
 
 localOps :: RGBARaster p 512 512 Word8 -> Raster S p 512 512 Word8 -> Benchmark
-localOps (RGBARaster r' g' b' _) img = bgroup "Local Operations"
+localOps (RGBARaster r g b _) img = bgroup "Local Operations"
   [ bench "fmap (+ 17) . lazy" $ nf (_array . strict S . fmap (+ 17) . lazy) img
-  , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) r') g'
+  , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) r) g
   , bench "zipWith (/)" $ nf (_array . strict S . zipWith (/) doubles) doubles
-  , bench "(+)"         $ nf (_array . strict S . (+ r')) g'
+  , bench "(+)"         $ nf (_array . strict S . (+ lazy r)) (lazy g)
   , bench "(/)"         $ nf (_array . strict S . (/ lazy doubles)) (lazy doubles)
   , bench "lmax"        $ nf (_array . strict S . lmax img) img
   , bench "lmin"        $ nf (_array . strict S . lmin img) img
@@ -77,7 +78,7 @@ localOps (RGBARaster r' g' b' _) img = bgroup "Local Operations"
   , bench "lmajority"   $ nf (_array . strict S . lmajority) rs
   , bench "lminority"   $ nf (_array . strict S . lminority) rs
   , bench "lvariance"   $ nf (fmap (_array . strict S) . lvariance) rs ]
-  where rs = r' :| [g', b']  -- This may be causing repeated overhead to `lvariety` and friends!
+  where rs = lazy r :| [lazy g, lazy b]
 
 hmatrix :: Benchmark
 hmatrix = bgroup "HMatrix"
@@ -125,7 +126,7 @@ focalOps img = bgroup "Focal Operations"
 
 compositeOps :: RGBARaster p 512 512 Double -> Benchmark
 compositeOps i@(RGBARaster r g _ _) = bgroup "Composite Operations"
-                                      [ bench "NDVI" $ nf (_array . strict S . ndvi g) r
+                                      [ bench "NDVI" $ nf (_array . strict S . ndvi (lazy g)) (lazy r)
                                       , bench "EVI"  $ nf (_array . strict S . evi) i ]
 
 fromRight :: Either a b -> b
@@ -150,12 +151,6 @@ vectorB = fromRight . fromVector Par
 vectorB' :: V.Vector Int -> Raster B p 256 256 Int
 vectorB' = fromRight . fromVector Par
 
-rgbaB :: FilePath -> IO (Raster S p 512 512 Word8)
-rgbaB = fmap (strict S . _red . fromRight) . fromRGBA
-
-rgbaB' :: FilePath -> IO (Raster S p 512 512 Double)
-rgbaB' = fmap (strict S . _red . fromRight) . fromRGBA
-
 doubles :: Raster U p 512 512 Double
 doubles = fromRight . fromVector Par $ U.fromList ([1..262144] :: [Double])
 
@@ -174,7 +169,7 @@ gray :: FilePath -> IO (Raster S p 512 512 Word8)
 gray fp = do
   i <- fromGray fp
   case i of
-    Left err  -> putStrLn err *> pure (constant S Par 8)
+    Left err  -> error err
     Right img -> pure img
 
 -- fileY :: IO (Raster S p 1753 1760 Word8)
@@ -182,7 +177,7 @@ fileY :: IO (Raster S p 512 512 Word8)
 fileY = do
   i <- fromGray "data/512x512.tif"
   case i of
-    Left err  -> putStrLn err *> pure (constant S Par 8)
+    Left err  -> error err
     Right img -> pure img
 
 fileRGB :: IO (RGBARaster p 512 512 Word8)
@@ -207,7 +202,7 @@ ndvi nir red = (nir - red) / (nir + red)
 -- | See: https://en.wikipedia.org/wiki/Enhanced_vegetation_index
 evi :: (KnownNat r, KnownNat c) => RGBARaster p r c Double -> Raster D p r c Double
 evi (RGBARaster r g b _) = 2.5 * (numer / denom)
-  where nir   = g  -- fudging it.
-        numer = nir - r
-        denom = nir + (6 * r) - (7.5 * b) + 1
+  where nir   = lazy g  -- fudging it.
+        numer = nir - lazy r
+        denom = nir + (6 * lazy r) - (7.5 * lazy b) + 1
 {-# INLINE evi #-}

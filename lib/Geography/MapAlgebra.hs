@@ -230,6 +230,7 @@ import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array hiding (zipWith)
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
+import           Data.Massiv.Array.Unsafe as A
 import           Data.Maybe (mapMaybe)
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
@@ -463,10 +464,10 @@ fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp 
 
 -- | An RGBA image whose colour bands are distinct. Since each band starts as `D`,
 -- any band you don't use won't consume extra memory.
-data RGBARaster p r c a = RGBARaster { _red   :: Raster D p r c a
-                                     , _green :: Raster D p r c a
-                                     , _blue  :: Raster D p r c a
-                                     , _alpha :: Raster D p r c a }
+data RGBARaster p r c a = RGBARaster { _red   :: !(Raster S p r c a)
+                                     , _green :: !(Raster S p r c a)
+                                     , _blue  :: !(Raster S p r c a)
+                                     , _alpha :: !(Raster S p r c a) }
 
 -- | Read any image type into a `Raster` of distinct colour bands
 -- with the cell type you declare. If the source image stores its
@@ -482,15 +483,33 @@ fromRGBA fp = do
   let rows = fromInteger $ natVal (Proxy :: Proxy r)
       cols = fromInteger $ natVal (Proxy :: Proxy c)
       (r :. c) = size img
-  pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
-  where f :: Image S RGBA a -> RGBARaster p r c a
-        f (delay -> img) = RGBARaster (Raster $ fmap (\(PixelRGBA r _ _ _) -> r) img)
-                                      (Raster $ fmap (\(PixelRGBA _ g _ _) -> g) img)
-                                      (Raster $ fmap (\(PixelRGBA _ _ b _) -> b) img)
-                                      (Raster $ fmap (\(PixelRGBA _ _ _ a) -> a) img)
+  if r == rows && c == cols
+    then do
+    (ar, ag, ab, aa) <- spreadRGBA img
+    pure . Right $ RGBARaster (Raster ar) (Raster ag) (Raster ab) (Raster aa)
+    else pure . Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c
 {-# INLINE fromRGBA #-}
 
--- TODO: How to unify these two functions?
+spreadRGBA :: (Index ix, Elevator e)
+  => A.Array S ix (Pixel RGBA e)
+  -> IO (A.Array S ix e, A.Array S ix e, A.Array S ix e, A.Array S ix e)
+spreadRGBA arr = do
+  let sz = A.size arr
+  mr <- A.unsafeNew sz
+  mb <- A.unsafeNew sz
+  mg <- A.unsafeNew sz
+  ma <- A.unsafeNew sz
+  flip A.imapP_ arr $ \ix (PixelRGBA r g b a) -> do
+    A.unsafeWrite mr ix r
+    A.unsafeWrite mg ix g
+    A.unsafeWrite mb ix b
+    A.unsafeWrite ma ix a
+  ar <- A.unsafeFreeze (getComp arr) mr
+  ag <- A.unsafeFreeze (getComp arr) mg
+  ab <- A.unsafeFreeze (getComp arr) mb
+  aa <- A.unsafeFreeze (getComp arr) ma
+  return (ar, ag, ab, aa)
+{-# INLINE spreadRGBA #-}
 
 -- | Read a grayscale image. If the source file has more than one colour band,
 -- they'll be combined automatically.
