@@ -228,7 +228,7 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Massiv.Array as A
-import           Data.Massiv.Array hiding (zipWith)
+import           Data.Massiv.Array hiding (zipWith, toList)
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Massiv.Array.Unsafe as A
@@ -656,7 +656,7 @@ lmajority = fmap majo . sequenceA
 majo :: (Foldable t, Ord a) => t a -> a
 majo = fst . g . f
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = foldl1 (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
+        g = L.foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 {-# INLINE majo #-}
 
 -- | The least frequently appearing value at each shared index.
@@ -668,7 +668,7 @@ lminority = fmap mino . sequenceA
 mino :: (Foldable t, Ord a) => t a -> a
 mino = fst . g . f
   where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = foldl1 (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+        g = L.foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 {-# INLINE mino #-}
 
 -- | A measure of how spread out a dataset is. This calculation will fail
