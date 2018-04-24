@@ -19,6 +19,7 @@ import           Prelude hiding (zipWith)
 main :: IO ()
 main = do
   img   <- fileY
+  imgF  <- fileY
   rgba  <- fileRGB
   rgbaF <- fileRGB'
   defaultMain
@@ -27,10 +28,10 @@ main = do
     , io
     , colouring img
     , massivOps img
-    , localOps rgba img
+    , localOps rgba rgbaF img
     , hmatrix
     , conversions img
-    , focalOps img
+    , focalOps img imgF
     , compositeOps rgbaF
     ]
 
@@ -49,7 +50,7 @@ io :: Benchmark
 io = bgroup "IO"
      [ bench "fromRGBA 512x512" $ nfIO (_array . _red <$> fileRGB)
      , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array . _red <$> fileRGB')
-     , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY)
+     , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY @Word8)
      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "data/gray512.tif") ]
 
 colouring :: Raster S p 512 512 Word8 -> Benchmark
@@ -64,21 +65,24 @@ massivOps img = bgroup "Massiv Operations"
                 , bench "strict U . lazy" $ nf (_array . strict U . lazy) img
                 , bench "strict P . lazy" $ nf (_array . strict P . lazy) img ]
 
-localOps :: RGBARaster p 512 512 Word8 -> Raster S p 512 512 Word8 -> Benchmark
-localOps (RGBARaster r g b _) img = bgroup "Local Operations"
+localOps :: RGBARaster p 512 512 Word8 -> RGBARaster p 512 512 Double -> Raster S p 512 512 Word8 -> Benchmark
+localOps (RGBARaster r g b _) (RGBARaster rF gF bF _) img = bgroup "Local Operations"
   [ bench "fmap (+ 17) . lazy" $ nf (_array . strict S . fmap (+ 17) . lazy) img
-  , bench "zipWith (+)" $ nf (_array . strict S . zipWith (+) r) g
-  , bench "zipWith (/)" $ nf (_array . strict S . zipWith (/) doubles) doubles
-  , bench "(+)"         $ nf (_array . strict S . (+ lazy r)) (lazy g)
-  , bench "(/)"         $ nf (_array . strict S . (/ lazy doubles)) (lazy doubles)
-  , bench "lmax"        $ nf (_array . strict S . lmax img) img
-  , bench "lmin"        $ nf (_array . strict S . lmin img) img
-  , bench "lmean"       $ nf (_array . strict S . lmean @Word8 @Double) rs
-  , bench "lvariety"    $ nf (_array . strict S . lvariety) rs
-  , bench "lmajority"   $ nf (_array . strict S . lmajority) rs
-  , bench "lminority"   $ nf (_array . strict S . lminority) rs
-  , bench "lvariance"   $ nf (fmap (_array . strict S) . lvariance) rs ]
-  where rs = lazy r :| [lazy g, lazy b]
+  , bench "zipWith (+)"    $ nf (_array . strict S . zipWith (+) r) g
+  , bench "zipWith (/)"    $ nf (_array . strict S . zipWith (/) doubles) doubles
+  , bench "(+)"            $ nf (_array . strict S . (+ lazy r)) (lazy g)
+  , bench "(/)"            $ nf (_array . strict S . (/ lazy doubles)) (lazy doubles)
+  , bench "lmax"           $ nf (_array . strict S . lmax img) img
+  , bench "lmin"           $ nf (_array . strict S . lmin img) img
+  , bench "lmean (Word8)"  $ nf (_array . strict S . lmean @Word8 @Double) rs
+  , bench "lmean (Double)" $ nf (_array . strict S . lmean @Double @Double) rsF
+  , bench "lvariety"       $ nf (_array . strict S . lvariety) rs
+  , bench "lmajority"      $ nf (_array . strict S . lmajority) rs
+  , bench "lminority"      $ nf (_array . strict S . lminority) rs
+  , bench "lvariance (Word8)"  $ nf (fmap (_array . strict S) . lvariance) rs
+  , bench "lvariance (Double)" $ nf (fmap (_array . strict S) . lvariance) rsF ]
+  where rs  = lazy r :| [lazy g, lazy b]
+        rsF = lazy rF :| [lazy gF, lazy bF]
 
 hmatrix :: Benchmark
 hmatrix = bgroup "HMatrix"
@@ -93,10 +97,13 @@ conversions img = bgroup "Numeric Conversion"
                   , bench "Word -> Double via realToFrac"   $ nf (realToFrac @Word8 @Double) 5
                   , bench "realToFrac on Raster"            $ nf (_array . strict S . fmap (realToFrac @Word8 @Double) . lazy) img ]
 
-focalOps :: Raster S p 512 512 Word8 -> Benchmark
-focalOps img = bgroup "Focal Operations"
-               [ bench "fsum"        $ nf (_array . strict S . fsum) img
-               , bench "fmean"       $ nf (_array . strict S . fmean @Word8 @Double) img
+focalOps :: Raster S p 512 512 Word8 -> Raster S p 512 512 Double -> Benchmark
+focalOps img imgF = bgroup "Focal Operations"
+               [ bench "fsum" $ nf (_array . strict S . fsum) img
+               , bgroup "fmean"
+                 [ bench "Word8"  $ nf (_array . strict S . fmean @Word8 @Double) img
+                 , bench "Double" $ nf (_array . strict S . fmean @Double @Double) imgF
+                 ]
                , bench "fmax"        $ nf (_array . strict S . fmax) img
                , bench "fmin"        $ nf (_array . strict S . fmin) img
                , bench "fmajority"   $ nf (_array . strict S . fmajority) img
@@ -110,17 +117,27 @@ focalOps img = bgroup "Focal Operations"
                , bench "fshape"      $ nf (_array . strict B . fshape) img
                , bench "ffrontage"   $ nf (_array . strict S . ffrontage . strict B . fshape) img
                , bench "farea"       $ nf (_array . strict S . farea . strict B . fshape) img
-               , bench "fvolume"     $ nf (_array . strict S . fvolume @Word8 @Double) img
-               , bench "fgradient"   $ nf (_array . strict S . fgradient) img
+               , bgroup "fvolume"
+                 [ bench "Word8"  $ nf (_array . strict S . fvolume @Word8 @Double) img
+                 , bench "Double" $ nf (_array . strict S . fvolume @Double @Double) imgF
+                 ]
+               , bgroup "fgradient"
+                 [ bench "Word8"  $ nf (_array . strict S . fgradient) img
+                 , bench "Double" $ nf (_array . strict S . fgradient) imgF
+                 ]
                , bgroup "faspect"
-                 [ bench "Unsafe" $ nf (_array . strict S . faspect') img
-                 , bench "Safe"   $ nf (_array . strict B . faspect) img
+                 [ bench "Unsafe (Word8)"  $ nf (_array . strict S . faspect') img
+                 , bench "Unsafe (Double)" $ nf (_array .strict S . faspect') imgF
+                 , bench "Safe (Word8)"    $ nf (_array . strict B . faspect) img
+                 , bench "Safe (Double)"   $ nf (_array . strict B . faspect) imgF
                  ]
                , bgroup "fdownstream"
-                 [ bench "Word" $ nf (_array . strict S . fdownstream) img
+                 [ bench "Word8"  $ nf (_array . strict S . fdownstream) img
+                 , bench "Double" $ nf (_array. strict S . fdownstream) imgF
                  ]
                , bgroup "fupstream"
-                 [ bench "Word" $ nf (_array . strict S . fupstream . strict S . fdownstream) img
+                 [ bench "Word8"  $ nf (_array . strict S . fupstream . strict S . fdownstream) img
+                 , bench "Double" $ nf (_array . strict S . fupstream . strict S . fdownstream) imgF
                  ]
                ]
 
@@ -177,13 +194,13 @@ gray fp = do
     Left err  -> error err
     Right img -> pure img
 
--- fileY :: IO (Raster S p 1753 1760 Word8)
-fileY :: IO (Raster S p 512 512 Word8)
+fileY :: Elevator a => IO (Raster S p 512 512 a)
 fileY = do
   i <- fromGray "data/512x512.tif"
   case i of
     Left err  -> error err
     Right img -> pure img
+{-# INLINE fileY #-}
 
 fileRGB :: IO (RGBARaster p 512 512 Word8)
 fileRGB = do

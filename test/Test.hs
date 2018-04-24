@@ -97,10 +97,10 @@ suite = testGroup "Unit Tests"
     ]
   ]
 
-one :: Raster P p 7 7 Int
+one :: Raster P p 7 7 Word
 one = constant P Seq 1
 
-two :: Raster P p 7 7 Int
+two :: Raster P p 7 7 Word
 two = constant P Seq 2
 
 small :: Raster P p 256 256 Int

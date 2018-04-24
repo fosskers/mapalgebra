@@ -643,8 +643,8 @@ lmean (a :| as)    = (\n -> realToFrac n / len) <$> foldl' (+) a as
 {-# INLINE lmean #-}
 
 -- | The count of unique values at each shared index.
-lvariety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster D p r c a) -> Raster D p r c Int
-lvariety = fmap (length . NE.nub) . sequenceA
+lvariety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster D p r c a) -> Raster D p r c Word
+lvariety = fmap (fromIntegral . length . NE.nub) . sequenceA
 {-# INLINE lvariety #-}
 
 -- | The most frequently appearing value at each shared index.
@@ -735,8 +735,8 @@ fmin = fclassify P.minimum Edge
 {-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
-fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Int
-fvariety = fclassify (length . L.nub) Edge
+fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Word
+fvariety = fclassify (fromIntegral . length . L.nub) Edge
 {-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
