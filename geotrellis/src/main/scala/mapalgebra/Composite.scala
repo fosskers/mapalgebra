@@ -19,9 +19,9 @@ class CompositeBench {
 
   @Setup
   def setup(): Unit = {
-    r   = IntArrayTile.empty(512, 512).map { (c, r, _) => c * r }
-    nir = IntArrayTile.empty(512, 512).map { (c, r, _) => c * r + 1 }
-    b   = IntArrayTile.empty(512, 512).map { (c, r, _) => c * r + 2 }
+    r   = DoubleArrayTile.empty(512, 512).mapDouble { (c, r, _) => (c * r).toDouble }
+    nir = DoubleArrayTile.empty(512, 512).mapDouble { (c, r, _) => (c * r + 1).toDouble }
+    b   = DoubleArrayTile.empty(512, 512).mapDouble { (c, r, _) => (c * r + 2).toDouble }
 
     val ramp = ColorRamp(Array[Int](0x003000ff, 0x1f4f14ff, 0x648744ff, 0x94c11cff, 0xc1f203ff,
                                     0xf1ff9fff, 0xf9e4e3ff, 0xca9196ff, 0x996561ff, 0x8e2612ff))
