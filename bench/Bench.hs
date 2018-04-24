@@ -127,7 +127,12 @@ focalOps img = bgroup "Focal Operations"
 compositeOps :: RGBARaster p 512 512 Double -> Benchmark
 compositeOps i@(RGBARaster r g _ _) = bgroup "Composite Operations"
                                       [ bench "NDVI" $ nf (_array . strict S . ndvi (lazy g)) (lazy r)
-                                      , bench "EVI"  $ nf (_array . strict S . evi) i ]
+                                      , bench "EVI"  $ nf (_array . strict S . evi) i
+                                      , bench "EVI + Colour" $ nf (_array . strict S . classify invisible cr . evi) i
+                                      , bench "EVI + Colour + PNG (D)" $ nf (png . classify invisible cr . evi) i
+                                      , bench "EVI + Colour + PNG (S)" $ nf (png . strict S . classify invisible cr . evi) i
+                                      ]
+  where cr = greenRed $ fmap (10 ^) [1..10]
 
 fromRight :: Either a b -> b
 fromRight (Right b) = b
@@ -200,7 +205,7 @@ ndvi nir red = (nir - red) / (nir + red)
 {-# INLINE ndvi #-}
 
 -- | See: https://en.wikipedia.org/wiki/Enhanced_vegetation_index
-evi :: (KnownNat r, KnownNat c) => RGBARaster p r c Double -> Raster D p r c Double
+evi :: (Fractional a, Storable a, KnownNat r, KnownNat c) => RGBARaster p r c a -> Raster D p r c a
 evi (RGBARaster r g b _) = 2.5 * (numer / denom)
   where nir   = lazy g  -- fudging it.
         numer = nir - lazy r

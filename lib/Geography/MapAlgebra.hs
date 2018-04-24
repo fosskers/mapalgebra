@@ -63,6 +63,7 @@ module Geography.MapAlgebra
   -- If you aren't interested in colour but still want to render your `Raster`,
   -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
   -- output with functions like `writeImage`.
+  , grayscale
   , invisible
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
@@ -72,9 +73,8 @@ module Geography.MapAlgebra
   -- with something like `writeImage`.
   --
   -- For quick debugging, you can visualize a `Raster` with `display`.
-  , grayscale
   , writeImage, writeImageAuto
-  , display
+  , png, display
   -- ** Projections
   , Projection(..)
   , reproject
@@ -219,6 +219,7 @@ import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData(..), deepseq)
 import           Data.Bits (testBit)
 import           Data.Bool (bool)
+import qualified Data.ByteString.Lazy as BL
 import           Data.Default (Default, def)
 import           Data.Foldable
 import           Data.Int
@@ -241,7 +242,7 @@ import qualified Data.Vector.Storable as VS
 import           Data.Word
 import           GHC.Generics (Generic)
 import           GHC.TypeLits
-import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..))
+import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..), ColorSpace)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Prelude as P
 import           Prelude hiding (zipWith)
@@ -595,7 +596,7 @@ purpleRed = ramp colours
   where colours = [ (51, 60, 255), (76, 60, 233), (99, 60, 211), (121, 60, 188), (155, 60, 155)
                   , (166, 60, 143), (188, 60, 121), (206, 60, 94), (217, 60, 83), (255, 60, 76) ]
 
--- | Convert a `Raster` into a grayscale pixels, suitable for easy output with functions
+-- | Convert a `Raster` into grayscale pixels, suitable for easy output with functions
 -- like `writeImage`.
 grayscale :: Functor (Raster u p r c) => Raster u p r c a -> Raster u p r c (Pixel Y a)
 grayscale = fmap PixelY
@@ -606,6 +607,12 @@ grayscale = fmap PixelY
 -- For more direct control, consider `displayImage` from 'massiv-io'.
 display :: (Functor (Raster u p r c), Load u Ix2 (Pixel Y a), Elevator a) => Raster u p r c a -> IO ()
 display = displayImage . computeAs S . _array . grayscale
+
+-- | Render a PNG-encoded `BL.ByteString` from a coloured `Raster`.
+-- Useful for returning a `Raster` from a webserver endpoint.
+png :: (Source u Ix2 (Pixel cs a), ColorSpace cs a) => Raster u p r c (Pixel cs a) -> BL.ByteString
+png (Raster a) = encode PNG def a
+{-# INLINE png #-}
 
 -- | Called /LocalClassification/ in GaCM. The first argument is the value
 -- to give to any index whose value is less than the lowest break in the `M.Map`.
