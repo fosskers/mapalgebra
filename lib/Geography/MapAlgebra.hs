@@ -406,6 +406,7 @@ instance (Fractional a, KnownNat r, KnownNat c) => Fractional (Raster D p r c a)
   {-# INLINE (/) #-}
 
   fromRational = constant D Par . fromRational
+  {-# INLINE fromRational #-}
 
 -- TODO: more explicit implementations?
 -- | `length` has a specialized \(\mathcal{O}(1)\) implementation.
@@ -635,7 +636,9 @@ lmax = zipWith P.max
 
 -- | Averages the values per-index of all `Raster`s in a collection.
 lmean :: (Real a, Fractional b, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Raster D p r c b
-lmean (a :| as) = (\n -> realToFrac n / len) <$> foldl' (+) a as
+lmean (a :| [b])   = Raster $ A.zipWith (\n m -> realToFrac (n + m) / 2) (_array a) (_array b)
+lmean (a :| [b,c]) = Raster $ A.zipWith3 (\n m o -> realToFrac (n + m + o) / 3) (_array a) (_array b) (_array c)
+lmean (a :| as)    = (\n -> realToFrac n / len) <$> foldl' (+) a as
   where len = 1 + fromIntegral (length as)
 {-# INLINE lmean #-}
 
