@@ -156,6 +156,7 @@ module Geography.MapAlgebra
   -- in a `Raster`. GaCM calls these /lineal characteristics/ and describes them fully
   -- on page 18 and 19.
   , Direction(..)
+  , Line(..)
   , flinkage, flength
   -- *** Areal
   -- | Focal operations that assume that groups of data points represent 2D areas
@@ -232,7 +233,6 @@ import           Data.Massiv.Array hiding (zipWith, toList)
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Massiv.Array.Unsafe as A
-import           Data.Maybe (mapMaybe)
 import           Data.Proxy (Proxy(..))
 import           Data.Semigroup
 import qualified Data.Set as S
@@ -790,42 +790,32 @@ fpercentile (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
                                        + bool 0 1 (se < fo) ) / 8
 {-# INLINE fpercentile #-}
 
--- | Focal Linkage - a description of how each neighbourhood focus is connected
--- to its neighbours. Foci of equal value to none of their neighbours will have
--- an empty `S.Set`.
-flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (S.Set Direction)
-flinkage (Raster a) = Raster $ mapStencil linkStencil a
-{-# INLINE flinkage #-}
-
 -- `Fill def` has the highest chance of the edge pixel and the off-the-edge pixel
 -- having a different value. This is until the following is addressed:
 -- https://github.com/fosskers/mapalgebra/pull/3#issuecomment-379943208
-linkStencil :: (Default a, Eq a) => Stencil Ix2 a (S.Set Direction)
-linkStencil = makeStencil (Fill def) (3 :. 3) (1 :. 1) $ \f ->
-  let focus = f (0 :. 0)
-      axes  = S.fromList $ mapMaybe (\(Pair ix d) -> bool Nothing (Just d) $ focus == f ix) ti
-      diag (Pair ix d) | L.any (`S.member` axes) (ignores d) = Nothing
-                       | focus == f ix = Just d
-                       | otherwise = Nothing
-      diags | S.size axes > 2 = mempty
-            | otherwise = S.fromList $ mapMaybe diag ex
-  in pure $ axes <> diags
-  where ti = [ Pair (0  :. 1)  East
-             , Pair (-1 :. 0)  North
-             , Pair (0  :. -1) West
-             , Pair (1  :. 0)  South ]
-        ex = [ Pair (-1 :. 1)  NorthEast
-             , Pair (-1 :. -1) NorthWest
-             , Pair (1  :. -1) SouthWest
-             , Pair (1  :. 1)  SouthEast ]
-{-# INLINE linkStencil #-}
+-- | Focal Linkage - a description of how each neighbourhood focus is connected
+-- to its neighbours. Foci of equal value to none of their neighbours will have
+-- an empty `S.Set`.
+flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Line
+flinkage (Raster a) = Raster $ mapStencil (neighbourhoodStencil linkage (Fill def)) a
+{-# INLINE flinkage #-}
 
-ignores :: Direction -> [Direction]
-ignores NorthWest = [ North, West ]
-ignores SouthWest = [ West, South ]
-ignores SouthEast = [ South, East ]
-ignores NorthEast = [ North, East ]
-ignores _         = []
+-- | A description of lineal directions with the same encoding as `Drain`.
+newtype Line = Line { _line :: Word8 }
+  deriving stock   (Eq, Ord, Show)
+  deriving newtype (Storable, Prim, Default)
+
+instance NFData Line where
+  rnf (Line a) = deepseq a ()
+
+linkage :: Eq a => a -> a -> a -> a -> a -> a -> a -> a -> a -> Line
+linkage nw no ne we fo ea sw so se = Line $ axes + diags
+  where axes  = bool 0 2 (no == fo) + bool 0 8 (we == fo) + bool 0 16 (ea == fo) + bool 0 64 (so == fo)
+        diags = bool 0 1     (nw == fo && not (testBit axes 1 || testBit axes 3))
+                + bool 0 4   (ne == fo && not (testBit axes 1 || testBit axes 4))
+                + bool 0 32  (sw == fo && not (testBit axes 3 || testBit axes 6))
+                + bool 0 128 (se == fo && not (testBit axes 4 || testBit axes 6))
+{-# INLINE linkage #-}
 
 -- | Directions that neighbourhood foci can be connected by. See `flinkage`
 -- and `flength`.
@@ -833,49 +823,21 @@ data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South
   deriving stock    (Eq, Ord, Enum, Show, Generic)
   deriving anyclass (NFData)
 
-data Pair = Pair !Ix2 !Direction
-
 -- | Focal Length - the length of the lineal structure at every location. The result is in
 -- "pixel units", where 1 is the height/width of one pixel.
-flength :: Manifest u Ix2 (S.Set Direction) => Raster u p r c (S.Set Direction) -> Raster DW p r c Double
-flength (Raster a) = Raster $ mapStencil lenStencil a
-{-# INLINE flength #-}
-
-lenStencil :: Stencil Ix2 (S.Set Direction) Double
-lenStencil = makeStencil (Fill mempty) (3 :. 3) (1 :. 1) $ \f ->
-  fmap (work . M.fromList) $ P.traverse (\i -> sequenceA (i, f i)) ixs
-  where ixs  = (:.) <$> [-1 .. 1] <*> [-1 .. 1]
-{-# INLINE lenStencil #-}
-
-work :: M.Map Ix2 (S.Set Direction) -> Double
-work m = maybe 0 id $ do
-  focus <- M.lookup (0 :. 0) m
-  axes  <- P.traverse (\d -> let i = advance d in (i,) <$> M.lookup i m) $ S.toList focus
-  let corners  = S.delete (0 :. 0) . mconcat $ P.map (\(i,ds) -> S.map ((+) i . advance) ds) axes
-      cornDirs = mapMaybe (`M.lookup` m) $ S.toList corners
-      dirs     = focus : (P.map snd axes <> cornDirs)
-  pure $ foldl' (\acc s -> acc + S.foldl' (\acc' d -> acc' + g d) 0 s) 0 dirs
+flength :: Functor (Raster u p r c) => Raster u p r c Line -> Raster u p r c Double
+flength = fmap f
   where half = 1 / 2
         root = 1 / sqrt 2
-        g North = half
-        g West  = half
-        g South = half
-        g East  = half
-        g NorthWest = root
-        g SouthWest = root
-        g SouthEast = root
-        g NorthEast = root
-
--- | A delta that can be applied to other `Ix2` to "move" in the direction given.
-advance :: Direction -> Ix2
-advance North = (-1 :. 0)
-advance West  = (0  :. -1)
-advance South = (1  :. 0)
-advance East  = (0  :. 1)
-advance NorthWest = (-1 :. -1)
-advance SouthWest = (1  :. -1)
-advance SouthEast = (1  :. 1)
-advance NorthEast = (-1 :. 1)
+        f (Line a) = bool 0 half (testBit a 1)
+                     + bool 0 half (testBit a 3)
+                     + bool 0 half (testBit a 4)
+                     + bool 0 half (testBit a 6)
+                     + bool 0 root (testBit a 0)
+                     + bool 0 root (testBit a 2)
+                     + bool 0 root (testBit a 5)
+                     + bool 0 root (testBit a 7)
+{-# INLINE flength #-}
 
 -- | A pixel of a `Raster` with areal information about its corners.
 data Cell a = Cell { _cell :: !a, _corners :: !(Corners a) } deriving (Eq, Show)
@@ -1203,10 +1165,7 @@ angle u v = acos $ LA.dot u v
 -- to the desired direction is flipped. The `direction` function handles this.
 newtype Drain = Drain { _drain :: Word8 }
   deriving stock   (Eq, Ord, Show)
-  deriving newtype (Storable, Prim)
-
-instance Default Drain where
-  def = Drain 0
+  deriving newtype (Storable, Prim, Default)
 
 instance NFData Drain where
   rnf (Drain a) = deepseq a ()
