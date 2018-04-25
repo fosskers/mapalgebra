@@ -1063,28 +1063,8 @@ volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
 
 -- | Given a massiv Stencil "getter" function, yield the surficial facet points
 -- of the neighbourhood focus.
-facets :: (Fractional a, Applicative f) => (Ix2 -> f a) -> f [a]
-facets f = do
-  tl <- f (-1 :. -1)
-  up <- f (-1 :. 0)
-  tr <- f (-1 :. 1)
-  le <- f (0  :. -1)
-  fo <- f (0  :. 0)
-  ri <- f (0  :. 1)
-  bl <- f (1  :. -1)
-  bo <- f (1  :. 0)
-  br <- f (1  :. 1)
-  pure $ let nw = (tl + up + le + fo) / 4
-             ne = (up + tr + fo + ri) / 4
-             sw = (le + fo + bl + bo) / 4
-             se = (fo + ri + bo + br) / 4
-         in [ nw, (up + fo) / 2, ne
-            , (le + fo) / 2, fo, (fo + ri) / 2
-            , sw, (fo + bo) / 2, se ]
-{-# INLINE facets #-}
-
-facets' :: (Fractional a, Applicative f) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
-facets' g f = do
+facets :: (Fractional a, Applicative f) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
+facets g f = do
   tl <- f (-1 :. -1)
   up <- f (-1 :. 0)
   tr <- f (-1 :. 1)
@@ -1099,7 +1079,7 @@ facets' g f = do
              sw = (le + fo + bl + bo) / 4
              se = (fo + ri + bo + br) / 4
          in g nw ((up + fo) / 2) ne ((le + fo) / 2) fo ((fo + ri) / 2) sw ((fo + bo) / 2) se
-{-# INLINE facets' #-}
+{-# INLINE facets #-}
 
 -- | Direct access to the entire neighbourhood.
 neighbourhood :: Applicative f => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
@@ -1113,13 +1093,9 @@ neighbourhoodStencil f b = makeStencil b (3 :. 3) (1 :. 1) (neighbourhood f)
 {-# INLINE neighbourhoodStencil #-}
 
 -- | Get the surficial facets for each pixel and apply some function to them.
-facetStencil :: (Fractional a, Default a) => ([a] -> b) -> Stencil Ix2 a b
-facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (fmap f . facets)
+facetStencil :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
+facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (facets f)
 {-# INLINE facetStencil #-}
-
-facetStencil' :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
-facetStencil' f = makeStencil Reflect (3 :. 3) (1 :. 1) (facets' f)
-{-# INLINE facetStencil' #-}
 
 -- | The first part to the "left pseudo inverse" needed to calculate
 -- a best-fitting plane of 9 points.
@@ -1141,7 +1117,7 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
 fgradient :: (Manifest u Ix2 Double) => Raster u p r c Double -> Raster DW p r c Double
-fgradient (Raster a) = Raster $ mapStencil (facetStencil' gradient) a
+fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
 {-# INLINE fgradient #-}
 
 -- | \(\tau\). One full rotation of the unit circle.
@@ -1176,7 +1152,7 @@ zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 -- aspect will be `Nothing`.
 faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
 faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
-  where f vs = case normal' vs of
+  where f nw no ne we fo ea sw so se = case normal' [ nw, no, ne, we, fo, ea, sw, so, se ] of
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
                    | otherwise -> Just $ angle (LA.normalize $ zcoord 0 n) axis
         axis = LA.vector [1, 0, 0]
@@ -1185,7 +1161,7 @@ faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
 -- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
 faspect' :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
-  where f vs = angle (LA.normalize $ zcoord 0 $ normal' vs) axis
+  where f nw no ne we fo ea sw so se = angle (LA.normalize $ zcoord 0 $ normal' [ nw, no, ne, we, fo, ea, sw, so , se ]) axis
         axis = LA.vector [1, 0, 0]
 {-# INLINE faspect' #-}
 
@@ -1263,7 +1239,7 @@ instance NFData Drain where
 -- so our resulting `Drain` would only contain the directions
 -- of the diagonals.
 fdownstream :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Drain
-fdownstream (Raster a) = Raster $ mapStencil (facetStencil' downstream) a
+fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
 {-# INLINE fdownstream #-}
 
 downstream :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Drain
