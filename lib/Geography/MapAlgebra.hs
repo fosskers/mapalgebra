@@ -744,12 +744,14 @@ fvariety (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmajority = fclassify majo Continue
+fmajority (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+  where f nw no ne we fo ea sw so se = majo [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fmajority #-}
 
 -- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fminority = fclassify mino Continue
+fminority (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+  where f nw no ne we fo ea sw so se = mino [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fminority #-}
 
 -- | TODO: Rename this.
