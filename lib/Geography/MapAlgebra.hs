@@ -737,8 +737,9 @@ fmin (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
 {-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
-fvariety :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Word
-fvariety = fclassify (fromIntegral . length . L.nub) Edge
+fvariety :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Word
+fvariety (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+  where f nw no ne we fo ea sw so se = fromIntegral . length $ L.nub [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
