@@ -1083,10 +1083,32 @@ facets f = do
             , sw, (fo + bo) / 2, se ]
 {-# INLINE facets #-}
 
+facets' :: (Fractional a, Applicative f) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
+facets' g f = do
+  tl <- f (-1 :. -1)
+  up <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  le <- f (0  :. -1)
+  fo <- f (0  :. 0)
+  ri <- f (0  :. 1)
+  bl <- f (1  :. -1)
+  bo <- f (1  :. 0)
+  br <- f (1  :. 1)
+  pure $ let nw = (tl + up + le + fo) / 4
+             ne = (up + tr + fo + ri) / 4
+             sw = (le + fo + bl + bo) / 4
+             se = (fo + ri + bo + br) / 4
+         in g nw ((up + fo) / 2) ne ((le + fo) / 2) fo ((fo + ri) / 2) sw ((fo + bo) / 2) se
+{-# INLINE facets' #-}
+
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Fractional a, Default a) => ([a] -> b) -> Stencil Ix2 a b
 facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (fmap f . facets)
 {-# INLINE facetStencil #-}
+
+facetStencil' :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
+facetStencil' f = makeStencil Reflect (3 :. 3) (1 :. 1) (facets' f)
+{-# INLINE facetStencil' #-}
 
 -- | The first part to the "left pseudo inverse" needed to calculate
 -- a best-fitting plane of 9 points.
@@ -1229,14 +1251,11 @@ instance NFData Drain where
 -- so our resulting `Drain` would only contain the directions
 -- of the diagonals.
 fdownstream :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Drain
-fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
+fdownstream (Raster a) = Raster $ mapStencil (facetStencil' downstream) a
 {-# INLINE fdownstream #-}
 
--- Had trouble trying to make this in terms of `Fractional a`.
-downstream :: [Double] -> Drain
-downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
-  | length (filter (<= fo) ds) == 1 = Drain 0  -- A pit. All neighbours are higher.
-  | otherwise = Drain . snd . foldl' f (head angles) $ tail angles
+downstream :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Drain
+downstream nw no ne we fo ea sw so se = Drain . snd $ foldl' f (0, 0) angles
   where f (!curr, !s) (!a, !d) | a =~ curr = (curr, s + d)
                                | a >  curr = (a, d)
                                | otherwise = (curr, s)
@@ -1248,7 +1267,6 @@ downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
                  , (fo - sw, 32)
                  , (fo - so, 64)
                  , (fo - se, 128) ]
-downstream _ = Drain 0
 
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
 -- directions from which liquid would flow into each surface location.
