@@ -35,12 +35,6 @@
 -- The "colour ramp" generation functions (like `greenRed`) gratefully borrow colour
 -- sets from Gretchen N. Peterson's book /Cartographer's Toolkit/.
 
-{- TODO
-
-Benchmark against numpy as well as GT's collections API
-
--}
-
 module Geography.MapAlgebra
   (
   -- * Types
@@ -97,12 +91,12 @@ module Geography.MapAlgebra
   -- If an operation you need isn't available here, use our `zipWith`:
   --
   -- @
-  -- zipWith :: (a -> b -> d) -> Raster p r c a -> Raster p r c b -> Raster p r c d
+  -- zipWith :: (a -> b -> d) -> Raster u p r c a -> Raster u p r c b -> Raster D p r c d
   --
-  -- -- Your operation, which you should INLINE and use bang patterns with.
+  -- -- Your operation.
   -- foo :: Int -> Int -> Int
   --
-  -- bar :: Projection p => Raster p r c Int -> Raster p r c Int -> Raster p r c Int
+  -- bar :: Raster u p r c Int -> Raster u p r c Int -> Raster D p r c Int
   -- bar a b = zipWith foo a b
   -- @
   , zipWith
@@ -112,19 +106,20 @@ module Geography.MapAlgebra
   -- `fmap` as normal:
   --
   -- @
-  -- myRaster :: Raster p r c Int
-  -- abs :: Num a => a -> a
+  -- myRaster :: Raster D p r c Int
   --
-  -- -- Absolute value of all values in the Raster.
-  -- fmap abs myRaster
+  -- -- Add 17 to every value in the Raster.
+  -- fmap (+ 17) myRaster
   -- @
   , classify
   -- *** Binary
   -- | You can safely use these with the `foldl` family on any `Foldable` of
   -- `Raster`s. You would likely want @foldl1'@ which is provided by both List
-  -- and Vector. Keep in mind that `Raster` has a `Num` instance, so you can use
+  -- and Vector.
+  --
+  -- Keep in mind that `Raster` `D` has a `Num` instance, so you can use
   -- all the normal math operators with them as well.
-  , lmin, lmax
+  , lmax, lmin
   -- *** Other
   -- | There is no binary form of these functions that exists without
   -- producing numerical error,  so you can't use the `foldl` family with these.
@@ -146,8 +141,7 @@ module Geography.MapAlgebra
   -- averaged :: Raster DW p r c Float
   -- averaged = fmean $ strict P myRaster
   -- @
-  , fclassify
-  , fsum, fmean
+  , fsum, fproduct, fmonoid, fmean
   , fmax, fmin
   , fmajority, fminority, fvariety
   , fpercentage, fpercentile
@@ -155,7 +149,6 @@ module Geography.MapAlgebra
   -- | Focal operations that assume that groups of data points represent line-like objects
   -- in a `Raster`. GaCM calls these /lineal characteristics/ and describes them fully
   -- on page 18 and 19.
-  , Direction(..)
   , Line(..)
   , flinkage, flength
   -- *** Areal
@@ -210,7 +203,8 @@ module Geography.MapAlgebra
   -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
   -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
   -- avoid redundant calculations.
-  , Drain(..), direction, directions, drainage
+  , Drain(..), Direction(..)
+  , direction, directions, drainage
   , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
   -- * Utilities
   , leftPseudo, tau
@@ -239,7 +233,6 @@ import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Storable as VS
 import           Data.Word
-import           GHC.Generics (Generic)
 import           GHC.TypeLits
 import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..), ColorSpace)
 import qualified Numeric.LinearAlgebra as LA
@@ -312,8 +305,8 @@ instance Projection WebMercator where
 -- @
 -- -- | A lazy 256x256 Raster with the value 5 at every index. Uses DataKinds
 -- -- and "type literals" to achieve the same-size guarantee.
--- myRaster :: Raster WebMercator 256 256 Int
--- myRaster = constant 5
+-- myRaster :: Raster D WebMercator 256 256 Int
+-- myRaster = constant D Par 5
 --
 -- >>> length myRaster
 -- 65536
@@ -695,33 +688,30 @@ zipWith :: (Source u Ix2 a, Source u Ix2 b) =>
 zipWith f (Raster a) (Raster b) = Raster $ A.zipWith f a b
 {-# INLINE zipWith #-}
 
-sumStencil :: (Num a, Default a) => Stencil Ix2 a a
-sumStencil = makeStencil (Fill 0) (3 :. 3) (1 :. 1) $ \f ->
-  f (-1 :. -1) + f (-1 :. 0) + f (-1 :. 1) +
-  f (0  :. -1) + f (0  :. 0) + f (0  :. 1) +
-  f (1  :. -1) + f (1  :. 0) + f (1  :. 1)
-{-# INLINE sumStencil #-}
-
--- | Focal Classification - full control over every value in the neighbourhood.
-fclassify :: (Default a, Manifest u Ix2 a) => ([a] -> b) -> Border a -> Raster u p r c a -> Raster DW p r c b
-fclassify f e (Raster a) = Raster $ mapStencil (groupStencil f e) a
-{-# INLINE fclassify #-}
-
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fsum (Raster a) = Raster $ mapStencil sumStencil a
+fsum (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill 0)) a
+  where f nw no ne we fo ea sw so se = nw + no + ne + we + fo + ea + sw + so + se
 {-# INLINE fsum #-}
+
+-- | Focal Product.
+fproduct :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fproduct (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill 1)) a
+  where f nw no ne we fo ea sw so se = nw * no * ne * we * fo * ea * sw * so * se
+
+-- | Focal Monoid - combine all elements of a neighbourhood via their `Monoid` instance.
+-- In terms of precedence, the neighbourhood focus is the "left-most", and all other
+-- elements are "added" to it.
+--
+-- This is not mentioned in GaCM, but seems useful nonetheless.
+fmonoid :: (Monoid a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmonoid (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill mempty)) a
+  where f nw no ne we fo ea sw so se = fo `mappend` nw `mappend` no `mappend` ne `mappend` we `mappend` ea `mappend` sw `mappend` so `mappend` se
 
 -- | Focal Mean.
 fmean :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
 fmean = fmap (\n -> realToFrac n / 9) . fsum
 {-# INLINE fmean #-}
-
--- TODO: Use `NonEmpty`?
-groupStencil :: Default a => ([a] -> b) -> Border a -> Stencil Ix2 a b
-groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ixs
-  where ixs = (:.) <$> [-1 .. 1] <*> [-1 .. 1]
-{-# INLINE groupStencil #-}
 
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
@@ -786,12 +776,13 @@ fpercentile (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
 -- https://github.com/fosskers/mapalgebra/pull/3#issuecomment-379943208
 -- | Focal Linkage - a description of how each neighbourhood focus is connected
 -- to its neighbours. Foci of equal value to none of their neighbours will have
--- an empty `S.Set`.
+-- a value of 0.
 flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Line
 flinkage (Raster a) = Raster $ mapStencil (neighbourhoodStencil linkage (Fill def)) a
 {-# INLINE flinkage #-}
 
 -- | A description of lineal directions with the same encoding as `Drain`.
+-- See `flinkage` and `flength`.
 newtype Line = Line { _line :: Word8 }
   deriving stock   (Eq, Ord, Show)
   deriving newtype (Storable, Prim, Default)
@@ -808,11 +799,9 @@ linkage nw no ne we fo ea sw so se = Line $ axes + diags
                 + bool 0 128 (se == fo && not (testBit axes 4 || testBit axes 6))
 {-# INLINE linkage #-}
 
--- | Directions that neighbourhood foci can be connected by. See `flinkage`
--- and `flength`.
+-- | Directions that neighbourhood foci can be connected by.
 data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
-  deriving stock    (Eq, Ord, Enum, Show, Generic)
-  deriving anyclass (NFData)
+  deriving (Eq, Ord, Enum, Show)
 
 -- | Focal Length - the length of the lineal structure at every location. The result is in
 -- "pixel units", where 1 is the height/width of one pixel.
