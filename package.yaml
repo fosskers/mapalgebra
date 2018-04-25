@@ -27,7 +27,7 @@ ghc-options:
   # - -fllvm
 
 dependencies:
-  - base >= 4.7 && < 4.12
+  - base >= 4.9 && < 4.12
   - bytestring
   - containers
   - data-default
