@@ -1,7 +1,7 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns, TupleSections, ApplicativeDo, BangPatterns, UnboxedTuples #-}
-{-# LANGUAGE DerivingStrategies, DeriveGeneric, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
+{-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples #-}
+{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -222,7 +222,7 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Massiv.Array as A
-import           Data.Massiv.Array hiding (zipWith, toList)
+import           Data.Massiv.Array hiding (zipWith)
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Massiv.Array.Unsafe as A
@@ -874,7 +874,7 @@ instance NFData a => NFData (Surround a) where
 
 -- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
 -- what `Surround` relationship does the focus have with the other pixels?
-surround :: Eq a => a -> a -> a -> a -> (Surround a)
+surround :: Eq a => a -> a -> a -> a -> Surround a
 surround fo tl tr br
   | up && tl == tr && tr == br = Complete tr
   | up && right = RightAngle
@@ -1028,7 +1028,7 @@ tau = 6.283185307179586
 --
 -- See: https://stackoverflow.com/a/16669463/643684
 gradient :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double
-gradient nw no ne we fo ea sw so se = (tau / 2) - (acos $ normal vs LA.! 2)
+gradient nw no ne we fo ea sw so se = (tau / 2) - acos (normal vs LA.! 2)
   where vs = [ nw, no, ne, we, fo, ea, sw, so, se ]
 
 -- | Given a list of \(z\) values, find a normal vector that /points down/
