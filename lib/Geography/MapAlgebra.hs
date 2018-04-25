@@ -779,8 +779,15 @@ fpercentage (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
 -- | Focal Percentile - the percentage of neighbourhood values that are /less/
 -- than the neighbourhood focus. Not to be confused with `fpercentage`.
 fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
-fpercentile (Raster a) = Raster $ mapStencil (percStencil f Continue) a
-  where f focus vs = fromIntegral (length $ filter (< focus) vs) / 8
+fpercentile (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+  where f nw no ne we fo ea sw so se = ( bool 0 1 (nw < fo)
+                                       + bool 0 1 (no < fo)
+                                       + bool 0 1 (ne < fo)
+                                       + bool 0 1 (we < fo)
+                                       + bool 0 1 (ea < fo)
+                                       + bool 0 1 (sw < fo)
+                                       + bool 0 1 (so < fo)
+                                       + bool 0 1 (se < fo) ) / 8
 {-# INLINE fpercentile #-}
 
 -- | Focal Linkage - a description of how each neighbourhood focus is connected
