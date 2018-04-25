@@ -1051,26 +1051,6 @@ volume tl up tr le fo ri bl bo br =
         se = (fo + ri + bo + br) / 4
 {-# INLINE volume #-}
 
--- | Given a massiv Stencil "getter" function, yield the surficial facet points
--- of the neighbourhood focus.
-facets :: (Fractional a, Applicative f) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
-facets g f = do
-  tl <- f (-1 :. -1)
-  up <- f (-1 :. 0)
-  tr <- f (-1 :. 1)
-  le <- f (0  :. -1)
-  fo <- f (0  :. 0)
-  ri <- f (0  :. 1)
-  bl <- f (1  :. -1)
-  bo <- f (1  :. 0)
-  br <- f (1  :. 1)
-  pure $ let nw = (tl + up + le + fo) / 4
-             ne = (up + tr + fo + ri) / 4
-             sw = (le + fo + bl + bo) / 4
-             se = (fo + ri + bo + br) / 4
-         in g nw ((up + fo) / 2) ne ((le + fo) / 2) fo ((fo + ri) / 2) sw ((fo + bo) / 2) se
-{-# INLINE facets #-}
-
 -- | Direct access to the entire neighbourhood.
 neighbourhood :: Applicative f => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
 neighbourhood g f = g <$> f (-1 :. -1) <*> f (-1 :. 0) <*> f (-1 :. 1)
@@ -1084,7 +1064,16 @@ neighbourhoodStencil f b = makeStencil b (3 :. 3) (1 :. 1) (neighbourhood f)
 
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
-facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (facets f)
+facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (neighbourhood g)
+  where g nw no ne we fo ea sw so se = f ((nw + no + we + fo) / 4)
+                                         ((no + fo) / 2)
+                                         ((no + ne + fo + ea) / 4)
+                                         ((we + fo) / 2)
+                                         fo
+                                         ((fo + ea) / 2)
+                                         ((we + fo + sw + so) / 4)
+                                         ((fo + so) / 2)
+                                         ((fo + ea + so + se) / 4)
 {-# INLINE facetStencil #-}
 
 -- | The first part to the "left pseudo inverse" needed to calculate
