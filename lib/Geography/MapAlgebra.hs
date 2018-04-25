@@ -1026,21 +1026,21 @@ farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
 
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
 -- represents elevation in some way.
-fvolume :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
+fvolume :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
 fvolume (Raster a) = Raster $ mapStencil volStencil a
 {-# INLINE fvolume #-}
 
-volStencil :: (Real a, Fractional b, Default a) => Stencil Ix2 a b
+volStencil :: (Fractional a, Default a) => Stencil Ix2 a a
 volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
-  tl <- realToFrac <$> f (-1 :. -1)
-  up <- realToFrac <$> f (-1 :. 0)
-  tr <- realToFrac <$> f (-1 :. 1)
-  le <- realToFrac <$> f (0  :. -1)
-  fo <- realToFrac <$> f (0  :. 0)
-  ri <- realToFrac <$> f (0  :. 1)
-  bl <- realToFrac <$> f (1  :. -1)
-  bo <- realToFrac <$> f (1  :. 0)
-  br <- realToFrac <$> f (1  :. 1)
+  tl <- f (-1 :. -1)
+  up <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  le <- f (0  :. -1)
+  fo <- f (0  :. 0)
+  ri <- f (0  :. 1)
+  bl <- f (1  :. -1)
+  bo <- f (1  :. 0)
+  br <- f (1  :. 1)
   pure $
     let nw = (tl + up + le + fo) / 4
         no = (up + fo) / 2
@@ -1050,36 +1050,30 @@ volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
         sw = (le + fo + bl + bo) / 4
         so = (fo + bo) / 2
         se = (fo + ri + bo + br) / 4
-    in volume fo nw no
-       + volume fo no ne
-       + volume fo ne ea
-       + volume fo ea se
-       + volume fo se so
-       + volume fo so sw
-       + volume fo sw we
-       + volume fo we nw  -- TODO Optimize this by removing `volume` and dividing by 24 only once at the end.
+    in ((fo * 8)  -- Simple algebra to reorganize individual volume calculations for each subtriangle.
+        + nw + no
+        + no + ne
+        + ne + ea
+        + ea + se
+        + se + so
+        + so + sw
+        + sw + we
+        + we + nw) / 24
 {-# INLINE volStencil #-}
-
--- | Given three points that form a triangle in some 3-dimensional vector
--- space, calculate the volume of the prism it forms if projected onto
--- the @z = 0@ plane. Negative volume is possible.
-volume :: Fractional a => a -> a -> a -> a
-volume a b c = (a + b + c) / 24
-{-# INLINE volume #-}
 
 -- | Given a massiv Stencil "getter" function, yield the surficial facet points
 -- of the neighbourhood focus.
-facets :: (Real a, Fractional b, Applicative f) => (Ix2 -> f a) -> f [b]
+facets :: (Fractional a, Applicative f) => (Ix2 -> f a) -> f [a]
 facets f = do
-  tl <- realToFrac <$> f (-1 :. -1)
-  up <- realToFrac <$> f (-1 :. 0)
-  tr <- realToFrac <$> f (-1 :. 1)
-  le <- realToFrac <$> f (0  :. -1)
-  fo <- realToFrac <$> f (0  :. 0)
-  ri <- realToFrac <$> f (0  :. 1)
-  bl <- realToFrac <$> f (1  :. -1)
-  bo <- realToFrac <$> f (1  :. 0)
-  br <- realToFrac <$> f (1  :. 1)
+  tl <- f (-1 :. -1)
+  up <- f (-1 :. 0)
+  tr <- f (-1 :. 1)
+  le <- f (0  :. -1)
+  fo <- f (0  :. 0)
+  ri <- f (0  :. 1)
+  bl <- f (1  :. -1)
+  bo <- f (1  :. 0)
+  br <- f (1  :. 1)
   pure $ let nw = (tl + up + le + fo) / 4
              ne = (up + tr + fo + ri) / 4
              sw = (le + fo + bl + bo) / 4
@@ -1087,9 +1081,10 @@ facets f = do
          in [ nw, (up + fo) / 2, ne
             , (le + fo) / 2, fo, (fo + ri) / 2
             , sw, (fo + bo) / 2, se ]
+{-# INLINE facets #-}
 
 -- | Get the surficial facets for each pixel and apply some function to them.
-facetStencil :: (Real a, Fractional b, Default a) => ([b] -> c) -> Stencil Ix2 a c
+facetStencil :: (Fractional a, Default a) => ([a] -> b) -> Stencil Ix2 a b
 facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (fmap f . facets)
 {-# INLINE facetStencil #-}
 
@@ -1112,7 +1107,7 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- | Focal Gradient - a measurement of surficial slope for each pixel relative to
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
-fgradient :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
+fgradient :: (Manifest u Ix2 Double) => Raster u p r c Double -> Raster DW p r c Double
 fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
 {-# INLINE fgradient #-}
 
@@ -1145,7 +1140,7 @@ zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 -- descends most rapidly. Results are in radians, with 0 or \(\tau\) being North,
 -- \(\tau / 4\) being East, and so on. For areas that are essentially flat, their
 -- aspect will be `Nothing`.
-faspect :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c (Maybe Double)
+faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
 faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = case normal' vs of
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
@@ -1154,7 +1149,7 @@ faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
 {-# INLINE faspect #-}
 
 -- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
-faspect' :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Double
+faspect' :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
   where f vs = angle (LA.normalize $ zcoord 0 $ normal' vs) axis
         axis = LA.vector [1, 0, 0]
@@ -1233,10 +1228,11 @@ instance NFData Drain where
 -- With these numbers it's clear that the corners would yield a steeper angle,
 -- so our resulting `Drain` would only contain the directions
 -- of the diagonals.
-fdownstream :: (Real a, Manifest u Ix2 a, Default a) => Raster u p r c a -> Raster DW p r c Drain
+fdownstream :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Drain
 fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
 {-# INLINE fdownstream #-}
 
+-- Had trouble trying to make this in terms of `Fractional a`.
 downstream :: [Double] -> Drain
 downstream ds@[nw, no, ne, we, fo, ea, sw, so, se]
   | length (filter (<= fo) ds) == 1 = Drain 0  -- A pit. All neighbours are higher.

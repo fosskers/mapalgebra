@@ -245,9 +245,9 @@ fvolumeHill = (flip index' (1 :. 1) $ _array actual) @?= expected
   where expected :: Double
         expected = P.sum [20,20,16,20,16,16,16,16,12,16,12,12] / 12
         actual :: Raster U p 3 3 Double
-        actual = strict U . fvolume @Double @Double . fromRight . fromVector Seq $ U.fromList [24,24,24
-                                                                                              ,16,16,16
-                                                                                              ,8,8,8]
+        actual = strict U . fvolume @Double . fromRight . fromVector Seq $ U.fromList [24,24,24
+                                                                                      ,16,16,16
+                                                                                      ,8,8,8]
 
 newtype Vec = Vec [Double] deriving (Show)
 

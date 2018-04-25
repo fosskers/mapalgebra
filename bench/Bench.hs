@@ -118,28 +118,31 @@ focalOps img imgF = bgroup "Focal Operations"
                , bench "ffrontage"   $ nf (_array . strict S . ffrontage . strict B . fshape) img
                , bench "farea"       $ nf (_array . strict S . farea . strict B . fshape) img
                , bgroup "fvolume"
-                 [ bench "Word8"  $ nf (_array . strict S . fvolume @Word8 @Double) img
-                 , bench "Double" $ nf (_array . strict S . fvolume @Double @Double) imgF
+                 [ bench "Word8 -> Double" $ nf (_array . strict S . fvolume . strict S . fmap (realToFrac @Word8 @Double) . lazy) img
+                 , bench "Double" $ nf (_array . strict S . fvolume) imgF
                  ]
                , bgroup "fgradient"
-                 [ bench "Word8"  $ nf (_array . strict S . fgradient) img
+                 [ bench "Word8"  $ nf (_array . strict S . fgradient . strict S . fmap wtod . lazy) img
                  , bench "Double" $ nf (_array . strict S . fgradient) imgF
                  ]
                , bgroup "faspect"
-                 [ bench "Unsafe (Word8)"  $ nf (_array . strict S . faspect') img
+                 [ bench "Unsafe (Word8)"  $ nf (_array . strict S . faspect' . strict S . fmap wtod . lazy) img
                  , bench "Unsafe (Double)" $ nf (_array .strict S . faspect') imgF
-                 , bench "Safe (Word8)"    $ nf (_array . strict B . faspect) img
+                 , bench "Safe (Word8)"    $ nf (_array . strict B . faspect . strict S . fmap wtod . lazy) img
                  , bench "Safe (Double)"   $ nf (_array . strict B . faspect) imgF
                  ]
                , bgroup "fdownstream"
-                 [ bench "Word8"  $ nf (_array . strict S . fdownstream) img
+                 [ bench "Word8"  $ nf (_array . strict S . fdownstream . strict S . fmap wtod . lazy) img
                  , bench "Double" $ nf (_array. strict S . fdownstream) imgF
                  ]
                , bgroup "fupstream"
-                 [ bench "Word8"  $ nf (_array . strict S . fupstream . strict S . fdownstream) img
+                 [ bench "Word8"  $ nf (_array . strict S . fupstream . strict S . fdownstream . strict S . fmap wtod . lazy) img
                  , bench "Double" $ nf (_array . strict S . fupstream . strict S . fdownstream) imgF
                  ]
                ]
+
+wtod :: Word8 -> Double
+wtod = realToFrac
 
 compositeOps :: RGBARaster p 512 512 Double -> Benchmark
 compositeOps i@(RGBARaster r g _ _) = bgroup "Composite Operations"
