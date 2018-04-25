@@ -111,12 +111,12 @@ focalOps img imgF = bgroup "Focal Operations"
                , bench "fvariety"    $ nf (_array . strict S . fvariety) img
                , bench "fpercentage" $ nf (_array . strict S . fpercentage) img
                , bench "fpercentile" $ nf (_array . strict S . fpercentile) img
-               , bench "flinkage"    $ nf (_array . strict B . flinkage) img
-               , bench "flength"     $ nf (_array . strict S . flength . strict B . flinkage) img
+               , bench "flinkage"    $ nf (_array . strict S . flinkage) img
+               , bench "flength"     $ nf (_array . strict S . flength . flinkage) img
                , bench "fpartition"  $ nf (_array . strict B . fpartition) img
                , bench "fshape"      $ nf (_array . strict B . fshape) img
-               , bench "ffrontage"   $ nf (_array . strict S . ffrontage . strict B . fshape) img
-               , bench "farea"       $ nf (_array . strict S . farea . strict B . fshape) img
+               , bench "ffrontage"   $ nf (_array . strict S . ffrontage . fshape) img
+               , bench "farea"       $ nf (_array . strict S . farea . fshape) img
                , bgroup "fvolume"
                  [ bench "Word8 -> Double" $ nf (_array . strict S . fvolume . strict S . fmap (realToFrac @Word8 @Double) . lazy) img
                  , bench "Double" $ nf (_array . strict S . fvolume) imgF
