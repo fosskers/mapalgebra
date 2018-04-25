@@ -1141,7 +1141,7 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
 fgradient :: (Manifest u Ix2 Double) => Raster u p r c Double -> Raster DW p r c Double
-fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
+fgradient (Raster a) = Raster $ mapStencil (facetStencil' gradient) a
 {-# INLINE fgradient #-}
 
 -- | \(\tau\). One full rotation of the unit circle.
@@ -1152,8 +1152,9 @@ tau = 6.283185307179586
 -- plane that matches those points.
 --
 -- See: https://stackoverflow.com/a/16669463/643684
-gradient :: [Double] -> Double
-gradient vs = (tau / 2) - (acos $ normal vs LA.! 2)
+gradient :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double
+gradient nw no ne we fo ea sw so se = (tau / 2) - (acos $ normal vs LA.! 2)
+  where vs = [ nw, no, ne, we, fo, ea, sw, so, se ]
 
 -- | Given a list of \(z\) values, find a normal vector that /points down/
 -- from a best-fit plane toward the cartographic plane.
