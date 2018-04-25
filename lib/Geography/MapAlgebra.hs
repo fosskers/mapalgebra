@@ -162,7 +162,7 @@ module Geography.MapAlgebra
   -- | Focal operations that assume that groups of data points represent 2D areas
   -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
   -- on page 20 and 21.
-  , Cell(..), Corners(..), Surround(..)
+  , Corners(..), Surround(..)
   , fpartition, fshape, ffrontage, farea
   -- *** Surficial
   -- | Focal operations that work over elevation `Raster`s. GaCM calls elevation
@@ -223,7 +223,6 @@ import           Data.Bool (bool)
 import qualified Data.ByteString.Lazy as BL
 import           Data.Default (Default, def)
 import           Data.Foldable
-import           Data.Int
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -754,14 +753,6 @@ fminority (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
   where f nw no ne we fo ea sw so se = mino [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fminority #-}
 
--- | TODO: Rename this.
-percStencil :: Default a => (a -> [a] -> b) -> Border a -> Stencil Ix2 a b
-percStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g ->
-  f <$> g (0 :. 0) <*> sequenceA [ g (-1 :. -1), g (-1 :. 0), g (-1 :. 1)
-                                 , g (0  :. -1),              g (0  :. 1)
-                                 , g (1  :. -1), g (1  :. 0), g (1  :. 1) ]
-{-# INLINE percStencil #-}
-
 -- | Focal Percentage - the percentage of neighbourhood values that are equal
 -- to the neighbourhood focus. Not to be confused with `fpercentile`.
 fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
@@ -839,16 +830,6 @@ flength = fmap f
                      + bool 0 root (testBit a 7)
 {-# INLINE flength #-}
 
--- | A pixel of a `Raster` with areal information about its corners.
-data Cell a = Cell { _cell :: !a, _corners :: !(Corners a) } deriving (Eq, Show)
-
-instance Default a => Default (Cell a) where
-  def = Cell def (Corners Open Open Open Open)
-  {-# INLINE def #-}
-
-instance NFData a => NFData (Cell a) where
-  rnf (Cell a cs) = a `deepseq` cs `deepseq` ()
-
 -- | A layout of the areal conditions of a single `Raster` pixel.
 -- It describes whether each pixel corner is occupied by the same
 -- "areal zone" as the pixel centre.
@@ -925,17 +906,17 @@ frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
 
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
-fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
+fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
 fpartition (Raster a) = Raster $ mapStencil partStencil a
 {-# INLINE fpartition #-}
 
-partStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
+partStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
 partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
   tl <- f (-1 :. 0)
   tr <- f (-1 :. 1)
   br <- f (0  :. 1)
   fo <- f (0  :. 0)
-  pure $ Cell fo $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
+  pure $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
 {-# INLINE partStencil #-}
 
 -- | Like `fpartition`, but considers the `Surround` of all corners. Is alluded to
@@ -943,9 +924,9 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 --
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
-fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
+fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
 fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
-  where f nw no ne we fo ea sw so se = Cell fo $ Corners (surround fo no nw we)
+  where f nw no ne we fo ea sw so se = Corners (surround fo no nw we)
                                        (surround fo so sw we)
                                        (surround fo so se ea)
                                        (surround fo no ne ea)
@@ -954,33 +935,24 @@ fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
 -- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
-ffrontage :: Functor (Raster u p r c) => Raster u p r c (Cell a) -> Raster u p r c Double
-ffrontage = fmap f
-  where f (Cell _ cs) = frontage cs
+ffrontage :: Functor (Raster u p r c) => Raster u p r c (Corners a) -> Raster u p r c Double
+ffrontage = fmap frontage
 {-# INLINE ffrontage #-}
 
 -- | The area of a 1x1 square is 1. It has 8 right-triangular sections,
--- each with area 1/8. So, here we prefer integer math for its speed,
--- only diving by 8 a final time at the end, back in `farea`.
-area :: Corners a -> Int
-area (Corners tl bl br tr) = 8 - f tl - f bl - f br - f tr
+-- each with area 1/8.
+area :: Corners a -> Double
+area (Corners tl bl br tr) = (8 - f tl - f bl - f br - f tr) / 8
   where f (Complete _) = 1
         f _ = 0
 {-# INLINE area #-}
-
-area' :: Eq a => a -> Corners a -> Int
-area' fo (Corners tl bl br tr) = f tl + f bl + f br + f tr
-  where f (Complete a) | a == fo = 1
-        f _ = 0
-{-# INLINE area' #-}
 
 -- | Focal Area - the area of the shape made up by a neighbourhood focus and its
 -- surrounding pixels. Each pixel is assumed to have length and width of 1.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
-farea :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
-farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
-  where f (Cell fo cs) vs = fromIntegral (area cs + foldl' (\acc (Cell v cs') -> acc + (bool (area' fo cs') (area cs') $ v == fo)) 0 vs) / 8
+farea :: Functor (Raster u p r c) => Raster u p r c (Corners a) -> Raster u p r c Double
+farea = fmap area
 {-# INLINE farea #-}
 
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
