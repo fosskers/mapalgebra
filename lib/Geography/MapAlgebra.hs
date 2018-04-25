@@ -923,15 +923,6 @@ frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
         f Open         = 0
         f RightAngle   = 1
 
--- | If the given pixel is not the neighbourhood focus nor does it share its value with the focus,
--- it might still have some of the focus's area incurring. In this case,
--- only `Complete` would contribute to the focus's areal frontage.
-frontage' :: Eq a => a -> Corners a -> Double
-frontage' a (Corners tl bl br tr) = f tl + f bl + f br + f tr
-  where f (Complete a') = bool 0 (1 / sqrt 2) $ a == a'
-        f _ = 0
-{-# INLINE frontage' #-}
-
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
 fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
@@ -953,32 +944,19 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
 fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Cell a)
-fshape (Raster a) = Raster $ mapStencil arealsStencil a
+fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
+  where f nw no ne we fo ea sw so se = Cell fo $ Corners (surround fo no nw we)
+                                       (surround fo so sw we)
+                                       (surround fo so se ea)
+                                       (surround fo no ne ea)
 {-# INLINE fshape #-}
-
-arealsStencil :: (Eq a, Default a) => Stencil Ix2 a (Cell a)
-arealsStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
-  tl <- f (-1 :. -1)
-  up <- f (-1 :. 0)
-  tr <- f (-1 :. 1)
-  le <- f (0  :. -1)
-  fo <- f (0  :. 0)
-  ri <- f (0  :. 1)
-  bl <- f (1  :. -1)
-  bo <- f (1  :. 0)
-  br <- f (1  :. 1)
-  pure $ Cell fo $ Corners (surround fo up tl le)
-                           (surround fo bo bl le)
-                           (surround fo bo br ri)
-                           (surround fo up tr ri)
-{-# INLINE arealsStencil #-}
 
 -- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
-ffrontage :: (Eq a, Default a, Manifest u Ix2 (Cell a)) => Raster u p r c (Cell a) -> Raster DW p r c Double
-ffrontage (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
-  where f (Cell fo cs) vs = frontage cs + foldl' (\acc (Cell v cs') -> acc + (bool (frontage' fo cs') (frontage cs') $ v == fo)) 0 vs
+ffrontage :: Functor (Raster u p r c) => Raster u p r c (Cell a) -> Raster u p r c Double
+ffrontage = fmap f
+  where f (Cell _ cs) = frontage cs
 {-# INLINE ffrontage #-}
 
 -- | The area of a 1x1 square is 1. It has 8 right-triangular sections,

@@ -203,14 +203,14 @@ fshapeTest = actual @?= expected
 ffrontageTest :: Assertion
 ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
   where expected :: Double
-        expected = 2 + (1 / 2) + (3 / sqrt 2)
+        expected = 1 + (1 / sqrt 2)
         actual :: Double
-        actual = flip index' (1 :. 1) . _array . strict P $ ffrontage rast
-        rast :: Raster B p 4 4 (Cell Int)
-        rast = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
-                                                                           ,1,0,0,0
-                                                                           ,1,0,0,1
-                                                                           ,1,0,1,1]
+        actual = flip index' (1 :. 1) . _array . strict S $ ffrontage rast
+        rast :: Raster DW p 4 4 (Cell Int)
+        rast = fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
+                                                                ,1,0,0,0
+                                                                ,1,0,0,1
+                                                                ,1,0,1,1]
 
 fareaOpen :: Assertion
 fareaOpen = actual @?= expected
