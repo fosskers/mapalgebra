@@ -726,12 +726,14 @@ groupStencil f e = makeStencil e (3 :. 3) (1 :. 1) $ \g -> f <$> P.traverse g ix
 
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmax = fclassify P.maximum Edge
+fmax (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+  where f nw no ne we fo ea sw so se = P.max nw . P.max no . P.max ne . P.max we . P.max fo . P.max ea . P.max sw $ P.max so se
 {-# INLINE fmax #-}
 
 -- | Focal Minimum.
 fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmin = fclassify P.minimum Edge
+fmin (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+  where f nw no ne we fo ea sw so se = P.min nw . P.min no . P.min ne . P.min we . P.min fo . P.min ea . P.min sw $ P.min so se
 {-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
