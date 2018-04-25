@@ -1027,22 +1027,21 @@ farea (Raster a) = Raster $ mapStencil (percStencil f Reflect) a
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
 -- represents elevation in some way.
 fvolume :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fvolume (Raster a) = Raster $ mapStencil volStencil a
+fvolume (Raster a) = Raster $ mapStencil (neighbourhoodStencil volume Reflect) a
 {-# INLINE fvolume #-}
 
-volStencil :: (Fractional a, Default a) => Stencil Ix2 a a
-volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
-  tl <- f (-1 :. -1)
-  up <- f (-1 :. 0)
-  tr <- f (-1 :. 1)
-  le <- f (0  :. -1)
-  fo <- f (0  :. 0)
-  ri <- f (0  :. 1)
-  bl <- f (1  :. -1)
-  bo <- f (1  :. 0)
-  br <- f (1  :. 1)
-  pure $
-    let nw = (tl + up + le + fo) / 4
+volume :: Fractional a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a
+volume tl up tr le fo ri bl bo br =
+  ((fo * 8)  -- Simple algebra to reorganize individual volume calculations for each subtriangle.
+    + nw + no
+    + no + ne
+    + ne + ea
+    + ea + se
+    + se + so
+    + so + sw
+    + sw + we
+    + we + nw) / 24
+  where nw = (tl + up + le + fo) / 4
         no = (up + fo) / 2
         ne = (up + tr + fo + ri) / 4
         we = (le + fo) / 2
@@ -1050,16 +1049,7 @@ volStencil = makeStencil Reflect (3 :. 3) (1 :. 1) $ \f -> do
         sw = (le + fo + bl + bo) / 4
         so = (fo + bo) / 2
         se = (fo + ri + bo + br) / 4
-    in ((fo * 8)  -- Simple algebra to reorganize individual volume calculations for each subtriangle.
-        + nw + no
-        + no + ne
-        + ne + ea
-        + ea + se
-        + se + so
-        + so + sw
-        + sw + we
-        + we + nw) / 24
-{-# INLINE volStencil #-}
+{-# INLINE volume #-}
 
 -- | Given a massiv Stencil "getter" function, yield the surficial facet points
 -- of the neighbourhood focus.
