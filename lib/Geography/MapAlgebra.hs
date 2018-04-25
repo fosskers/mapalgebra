@@ -1101,6 +1101,17 @@ facets' g f = do
          in g nw ((up + fo) / 2) ne ((le + fo) / 2) fo ((fo + ri) / 2) sw ((fo + bo) / 2) se
 {-# INLINE facets' #-}
 
+-- | Direct access to the entire neighbourhood.
+neighbourhood :: Applicative f => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> (Ix2 -> f a) -> f b
+neighbourhood g f = g <$> f (-1 :. -1) <*> f (-1 :. 0) <*> f (-1 :. 1)
+                    <*> f (0  :. -1) <*> f (0  :. 0) <*> f (0  :. 1)
+                    <*> f (1  :. -1) <*> f (1  :. 0) <*> f (1  :. 1)
+{-# INLINE neighbourhood #-}
+
+neighbourhoodStencil :: Default a => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Border a -> Stencil Ix2 a b
+neighbourhoodStencil f b = makeStencil b (3 :. 3) (1 :. 1) (neighbourhood f)
+{-# INLINE neighbourhoodStencil #-}
+
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Fractional a, Default a) => ([a] -> b) -> Stencil Ix2 a b
 facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (fmap f . facets)
@@ -1272,16 +1283,15 @@ downstream nw no ne we fo ea sw so se = Drain . snd $ foldl' f (0, 0) angles
 -- directions from which liquid would flow into each surface location.
 -- See also `fdownstream`.
 fupstream :: Manifest u Ix2 Drain => Raster u p r c Drain -> Raster DW p r c Drain
-fupstream (Raster a) = Raster $ mapStencil (percStencil f $ Fill (Drain 0)) a
-  where f _ [nw, no, ne, we, ea, sw, so, se] = Drain $ bool 0 1 (testBit (_drain nw) 7)
-                                               + bool 0 2   (testBit (_drain no) 6)
-                                               + bool 0 4   (testBit (_drain ne) 5)
-                                               + bool 0 8   (testBit (_drain we) 4)
-                                               + bool 0 16  (testBit (_drain ea) 3)
-                                               + bool 0 32  (testBit (_drain sw) 2)
-                                               + bool 0 64  (testBit (_drain so) 1)
-                                               + bool 0 128 (testBit (_drain se) 0)
-        f _ _ = Drain 0
+fupstream (Raster a) = Raster $ mapStencil (neighbourhoodStencil f $ Fill (Drain 0)) a
+  where f nw no ne we _ ea sw so se = Drain $ bool 0 1 (testBit (_drain nw) 7)
+                                      + bool 0 2   (testBit (_drain no) 6)
+                                      + bool 0 4   (testBit (_drain ne) 5)
+                                      + bool 0 8   (testBit (_drain we) 4)
+                                      + bool 0 16  (testBit (_drain ea) 3)
+                                      + bool 0 32  (testBit (_drain sw) 2)
+                                      + bool 0 64  (testBit (_drain so) 1)
+                                      + bool 0 128 (testBit (_drain se) 0)
 {-# INLINE fupstream #-}
 
 -- | Does a given `Drain` indicate flow in a certain `Direction`?
