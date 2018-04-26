@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples #-}
+{-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples, TypeInType #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
 
 -- |
@@ -69,6 +69,9 @@
 -- As always, @-O2@ is your friend. The @{-\# INLINE ... \#-}@ pragma is also very likely
 -- to improve the performance of code that uses functions from this library. Make sure
 -- to benchmark proactively.
+--
+-- For particularly mathy operations like `fmean`, compiling with @-fllvm@ grants
+-- about a 2x speedup.
 
 module Geography.MapAlgebra
   (

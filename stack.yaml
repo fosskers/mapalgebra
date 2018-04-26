@@ -1,4 +1,5 @@
 resolver: lts-11.6
+# resolver: nightly-2018-04-21
 
 packages:
   - .

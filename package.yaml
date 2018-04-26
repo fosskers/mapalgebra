@@ -20,10 +20,7 @@ ghc-options:
   - -fwarn-unused-matches
   - -fwarn-incomplete-patterns
   - -Wincomplete-uni-patterns
-  # These introduce around a 2x speedup.
-  # - -fno-liberate-case
-  # - -funfolding-use-threshold1000
-  # - -funfolding-keeness-factor1000
+  # This introduces around a 2x speedup.
   # - -fllvm
 
 dependencies:
