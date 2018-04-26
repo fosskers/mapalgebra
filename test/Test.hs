@@ -177,28 +177,28 @@ fromRight _ = error "Was Left"
 
 fpartitionTest :: Assertion
 fpartitionTest = actual @?= expected
-  where expected :: Raster B p 2 2 (Corners Int)
+  where expected :: Raster B p 2 2 Corners
         expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
                                                            , Corners Open Open Open Open
-                                                           , Corners OneSide Open OneSide (Complete 1)
+                                                           , Corners OneSide Open OneSide Complete
                                                            , Corners Open Open Open Open ]
-        actual :: Raster B p 2 2 (Corners Int)
-        actual = strict B . fpartition . fromRight . fromVector Seq $ U.fromList [1,1,2,1]
+        actual :: Raster B p 2 2 Corners
+        actual = strict B . fpartition . fromRight . fromVector Seq $ U.fromList ([1,1,2,1] :: [Int])
 
 fshapeTest :: Assertion
 fshapeTest = actual @?= expected
- where expected :: Raster B p 3 3 (Corners Int)
+ where expected :: Raster B p 3 3 Corners
        expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open OutFlow Open
                                                           , Corners Open Open Open Open
                                                           , Corners Open OutFlow Open Open
                                                           , Corners Open Open Open Open
-                                                          , Corners (Complete 1) (Complete 1) (Complete 1) (Complete 1)
+                                                          , Corners Complete Complete Complete Complete
                                                           , Corners Open Open Open Open
                                                           , Corners Open Open Open OutFlow
                                                           , Corners Open Open Open Open
                                                           , Corners OutFlow Open Open Open ]
-       actual :: Raster B p 3 3 (Corners Int)
-       actual = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
+       actual :: Raster B p 3 3 Corners
+       actual = strict B . fshape . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,0,1,1,1,1] :: [Int])
 
 ffrontageTest :: Assertion
 ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
@@ -206,11 +206,11 @@ ffrontageTest = let ?epsilon = 0.001 in actual @?~ expected
         expected = 1 + (1 / sqrt 2)
         actual :: Double
         actual = flip index' (1 :. 1) . _array . strict S $ ffrontage rast
-        rast :: Raster DW p 4 4 (Corners Int)
-        rast = fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
-                                                                ,1,0,0,0
-                                                                ,1,0,0,1
-                                                                ,1,0,1,1]
+        rast :: Raster DW p 4 4 Corners
+        rast = fshape . fromRight . fromVector Seq $ U.fromList ( [1,1,1,0
+                                                                  ,1,0,0,0
+                                                                  ,1,0,0,1
+                                                                  ,1,0,1,1] :: [Int] )
 
 fareaOpen :: Assertion
 fareaOpen = actual @?= expected
@@ -232,11 +232,11 @@ fareaComplex :: Assertion
 fareaComplex = let ?epsilon = 0.001 in actual @?~ (7 / 8)
   where actual :: Double
         actual = flip index' (1 :. 1) . _array . strict P $ farea rast
-        rast :: Raster DW p 4 4 (Corners Int)
-        rast = fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,0
-                                                                ,1,0,0,0
-                                                                ,1,0,0,1
-                                                                ,1,0,1,1]
+        rast :: Raster DW p 4 4 Corners
+        rast = fshape . fromRight . fromVector Seq $ U.fromList ( [1,1,1,0
+                                                                  ,1,0,0,0
+                                                                  ,1,0,0,1
+                                                                  ,1,0,1,1] :: [Int] )
 
 fvolumeFlat :: Assertion
 fvolumeFlat = (strict U $ fvolume expected) @?= expected

@@ -860,58 +860,58 @@ flength = fmap f
 -- | A layout of the areal conditions of a single `Raster` pixel.
 -- It describes whether each pixel corner is occupied by the same
 -- "areal zone" as the pixel centre.
-data Corners a = Corners { _topLeft     :: !(Surround a)
-                         , _bottomLeft  :: !(Surround a)
-                         , _bottomRight :: !(Surround a)
-                         , _topRight    :: !(Surround a) } deriving (Eq, Show)
+data Corners = Corners { _topLeft     :: !Surround
+                       , _bottomLeft  :: !Surround
+                       , _bottomRight :: !Surround
+                       , _topRight    :: !Surround } deriving (Eq, Show)
 
-instance NFData a => NFData (Corners a) where
+instance NFData Corners where
   rnf (Corners tl bl br tr) = tl `deepseq` bl `deepseq` br `deepseq` tr `deepseq` ()
 
 -- | A state of surroundedness of a pixel corner.
 -- For the examples below, the bottom-left pixel is considered the focus and
 -- we're wondering about the surroundedness of its top-right corner.
-data Surround a = Complete !a  -- ^ A corner has three of the same opponent against it.
-                               --
-                               -- The corner is considered "occupied" by the opponent value,
-                               -- thus forming a diagonal areal edge.
-                               --
-                               -- @
-                               -- [ 1 1 ]
-                               -- [ 0 1 ]
-                               -- @
-                | OneSide      -- ^ One edge of a corner is touching an opponent, but
-                               -- the other edge touches a friend.
-                               --
-                               -- @
-                               -- [ 1 1 ]  or  [ 0 1 ]
-                               -- [ 0 0 ]      [ 0 1 ]
-                               -- @
-                | Open         -- ^ A corner is surrounded by friends.
-                               --
-                               -- @
-                               -- [ 0 0 ]  or  [ 0 0 ]  or  [ 1 0 ]
-                               -- [ 0 0 ]      [ 0 1 ]      [ 0 0 ]
-                               -- @
-                | RightAngle   -- ^ Similar to `Complete`, except that the diagonal
-                               -- opponent doesn't match the other two. The corner
-                               -- is considered surrounded, but not "occupied".
-                               --
-                               -- @
-                               -- [ 1 2 ]
-                               -- [ 0 1 ]
-                               -- @
-                | OutFlow      -- ^ Similar to `Complete`, except that the area of the
-                               -- focus surrounds the diagonal neighbour.
-                               -- @
-                               -- [ 0 1 ]
-                               -- [ 0 0 ]
-                               -- @
+data Surround = Complete      -- ^ A corner has three of the same opponent against it.
+                              --
+                              -- The corner is considered "occupied" by the opponent value,
+                              -- thus forming a diagonal areal edge.
+                              --
+                              -- @
+                              -- [ 1 1 ]
+                              -- [ 0 1 ]
+                              -- @
+                | OneSide     -- ^ One edge of a corner is touching an opponent, but
+                              -- the other edge touches a friend.
+                              --
+                              -- @
+                              -- [ 1 1 ]  or  [ 0 1 ]
+                              -- [ 0 0 ]      [ 0 1 ]
+                              -- @
+                | Open        -- ^ A corner is surrounded by friends.
+                              --
+                              -- @
+                              -- [ 0 0 ]  or  [ 0 0 ]  or  [ 1 0 ]
+                              -- [ 0 0 ]      [ 0 1 ]      [ 0 0 ]
+                              -- @
+                | RightAngle  -- ^ Similar to `Complete`, except that the diagonal
+                              -- opponent doesn't match the other two. The corner
+                              -- is considered surrounded, but not "occupied".
+                              --
+                              -- @
+                              -- [ 1 2 ]
+                              -- [ 0 1 ]
+                              -- @
+                | OutFlow     -- ^ Similar to `Complete`, except that the area of the
+                              -- focus surrounds the diagonal neighbour.
+                              -- @
+                              -- [ 0 1 ]
+                              -- [ 0 0 ]
+                              -- @
   deriving (Eq, Ord, Show)
 
-instance NFData a => NFData (Surround a) where
+instance NFData Surround where
   rnf s = case s of
-    Complete a -> a `deepseq` ()
+    Complete   -> ()
     OneSide    -> ()
     Open       -> ()
     RightAngle -> ()
@@ -919,9 +919,9 @@ instance NFData a => NFData (Surround a) where
 
 -- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
 -- what `Surround` relationship does the focus have with the other pixels?
-surround :: Eq a => a -> a -> a -> a -> Surround a
+surround :: Eq a => a -> a -> a -> a -> Surround
 surround fo tl tr br
-  | up && tl == tr && tr == br = Complete tr
+  | up && tl == tr && tr == br = Complete
   | up && right = RightAngle
   | (up && diag) || (diag && right) = OneSide
   | diag && fo == tl && fo == br = OutFlow
@@ -932,21 +932,21 @@ surround fo tl tr br
 {-# INLINE surround #-}
 
 -- | What is the total length of the areal edges (if there are any) at a given pixel?
-frontage :: Corners a -> Double
+frontage :: Corners -> Double
 frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
-  where f (Complete _) = 1 / sqrt 2
-        f OneSide      = 1 / 2
-        f Open         = 0
-        f RightAngle   = 1
-        f OutFlow      = 1 / sqrt 2
+  where f Complete   = 1 / sqrt 2
+        f OneSide    = 1 / 2
+        f Open       = 0
+        f RightAngle = 1
+        f OutFlow    = 1 / sqrt 2
 
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
-fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
+fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
 fpartition (Raster a) = Raster $ mapStencil partStencil a
 {-# INLINE fpartition #-}
 
-partStencil :: (Eq a, Default a) => Stencil Ix2 a (Corners a)
+partStencil :: (Eq a, Default a) => Stencil Ix2 a Corners
 partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
   tl <- f (-1 :. 0)
   tr <- f (-1 :. 1)
@@ -960,7 +960,7 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 --
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
-fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c (Corners a)
+fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
 fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
   where f nw no ne we fo ea sw so se = Corners (surround fo no nw we)
                                        (surround fo so sw we)
@@ -971,19 +971,16 @@ fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
 -- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
-ffrontage :: Functor (Raster u p r c) => Raster u p r c (Corners a) -> Raster u p r c Double
+ffrontage :: Functor (Raster u p r c) => Raster u p r c Corners -> Raster u p r c Double
 ffrontage = fmap frontage
 {-# INLINE ffrontage #-}
 
 -- | The area of a 1x1 square is 1. It has 8 right-triangular sections,
 -- each with area 1/8.
-area :: Corners a -> Double
--- area (Corners tl bl br tr) = (8 - f tl - f bl - f br - f tr) / 8
---   where f (Complete _) = 1
---         f _ = 0
+area :: Corners -> Double
 area (Corners tl bl br tr) = 1 - f tl - f bl - f br - f tr
-  where f (Complete _) = 1/8
-        f OutFlow = -1/8  -- For areas that "invade" their neighbours.
+  where f Complete = 1/8
+        f OutFlow  = -1/8  -- For areas that "invade" their neighbours.
         f _ = 0
 {-# INLINE area #-}
 
@@ -991,7 +988,7 @@ area (Corners tl bl br tr) = 1 - f tl - f bl - f br - f tr
 -- surrounding pixels. Each pixel is assumed to have length and width of 1.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
-farea :: Functor (Raster u p r c) => Raster u p r c (Corners a) -> Raster u p r c Double
+farea :: Functor (Raster u p r c) => Raster u p r c Corners -> Raster u p r c Double
 farea = fmap area
 {-# INLINE farea #-}
 
