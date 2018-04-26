@@ -903,6 +903,7 @@ data Surround = Complete      -- ^ A corner has three of the same opponent again
                               -- @
                 | OutFlow     -- ^ Similar to `Complete`, except that the area of the
                               -- focus surrounds the diagonal neighbour.
+                              --
                               -- @
                               -- [ 0 1 ]
                               -- [ 0 0 ]
