@@ -1,7 +1,7 @@
 name:                mapalgebra
 version:             1.0.0
-synopsis:            Map Algebra types and common operations.
-description:         Map Algebra types and common operations.
+synopsis:            Efficient, polymorphic Map Algebra.
+description:         Efficient, polymorphic Map Algebra.
 homepage:            https://github.com/fosskers/mapalgebra
 license:             BSD3
 author:              Colin Woodbury
