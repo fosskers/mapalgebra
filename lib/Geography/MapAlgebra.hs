@@ -7,7 +7,7 @@
 -- Module    : Geography.MapAlgebra
 -- Copyright : (c) Colin Woodbury, 2018
 -- License   : BSD3
--- Maintainer: Colin Woodbury <colingw@gmail.com>
+-- Maintainer: Colin Woodbury <colin@fosskers.ca>
 --
 -- This library is an implementation of /Map Algebra/ as described in the
 -- book /GIS and Cartographic Modeling/ (GaCM) by Dana Tomlin. The fundamental
@@ -25,8 +25,8 @@
 --
 -- * Single-Raster /Local Operations/ -> `fmap` with pure functions
 -- * Multi-Raster /Local Operations/ -> `foldl` with `zipWith` and pure functions
--- * /Focal Operations/ -> More general than /convolution/; 'massiv' has support for this (described below)
--- * /Zonal Operations/ -> ??? TODO
+-- * /Focal Operations/ -> 'massiv'-based smart `Stencil` operations
+-- * /Zonal Operations/ -> Not yet implemented
 --
 -- Whether it is meaningful to perform operations between two given
 -- `Raster`s (i.e. whether the Rasters properly overlap on the earth) is not
@@ -34,6 +34,41 @@
 --
 -- The "colour ramp" generation functions (like `greenRed`) gratefully borrow colour
 -- sets from Gretchen N. Peterson's book /Cartographer's Toolkit/.
+--
+-- === A Word on Massiv: Fused, Parallel Arrays
+-- Thanks to the underlying `Array` library [massiv](https://hackage.haskell.org/package/massiv),
+-- most operations over and between Rasters are /fused/, meaning that no extra memory
+-- is allocated in between each step of a composite operation.
+--
+-- Take the [Enhanced Vegetation Index](https://en.wikipedia.org/wiki/Enhanced_vegetation_index)
+-- calculation:
+--
+-- @
+-- evi :: Raster D p r c Double -> Raster D p r c Double -> Raster D p r c Double -> Raster D p r c Double
+-- evi nir red blue = 2.5 * (numer / denom)
+--   where numer = nir - red
+--         denom = nir + (6 * red) - (7.5 * blue) + 1
+-- @
+--
+-- 8 binary operators are used here, but none allocate new memory. It's only when
+-- some `lazy` Raster is made `strict` that calculations occur and memory is allocated.
+--
+-- Provided your machine has more than 1 CPU, Rasters read by functions like
+-- `fromRGBA` will automatically be in `Par`allel mode. This means that
+-- forcing calculations with `strict` will cause evaluation to be done
+-- with every CPU your machine has. The effect of this is quite potent for Focal
+-- Operations, which yield special, cache-friendly windowed (`DW`) Rasters.
+--
+-- Familiarity with Massiv will help in using this library. A guide
+-- [can be found here](https://github.com/lehins/massiv).
+--
+-- === Compilation Options for Best Performance
+-- When using this library, always compile your project with @-threaded@ and @-with-rtsopts=-N@.
+-- These will ensure your executables will automatically use all the available CPU cores.
+--
+-- As always, @-O2@ is your friend. The @{-\# INLINE ... \#-}@ pragma is also very likely
+-- to improve the performance of code that uses functions from this library. Make sure
+-- to benchmark proactively.
 
 module Geography.MapAlgebra
   (
