@@ -901,6 +901,12 @@ data Surround a = Complete !a  -- ^ A corner has three of the same opponent agai
                                -- [ 1 2 ]
                                -- [ 0 1 ]
                                -- @
+                | OutFlow      -- ^ Similar to `Complete`, except that the area of the
+                               -- focus surrounds the diagonal neighbour.
+                               -- @
+                               -- [ 0 1 ]
+                               -- [ 0 0 ]
+                               -- @
   deriving (Eq, Ord, Show)
 
 instance NFData a => NFData (Surround a) where
@@ -909,6 +915,7 @@ instance NFData a => NFData (Surround a) where
     OneSide    -> ()
     Open       -> ()
     RightAngle -> ()
+    OutFlow    -> ()
 
 -- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
 -- what `Surround` relationship does the focus have with the other pixels?
@@ -917,6 +924,7 @@ surround fo tl tr br
   | up && tl == tr && tr == br = Complete tr
   | up && right = RightAngle
   | (up && diag) || (diag && right) = OneSide
+  | diag && fo == tl && fo == br = OutFlow
   | otherwise = Open
   where up    = fo /= tl
         diag  = fo /= tr
@@ -930,6 +938,7 @@ frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
         f OneSide      = 1 / 2
         f Open         = 0
         f RightAngle   = 1
+        f OutFlow      = 1 / sqrt 2
 
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
@@ -969,8 +978,12 @@ ffrontage = fmap frontage
 -- | The area of a 1x1 square is 1. It has 8 right-triangular sections,
 -- each with area 1/8.
 area :: Corners a -> Double
-area (Corners tl bl br tr) = (8 - f tl - f bl - f br - f tr) / 8
-  where f (Complete _) = 1
+-- area (Corners tl bl br tr) = (8 - f tl - f bl - f br - f tr) / 8
+--   where f (Complete _) = 1
+--         f _ = 0
+area (Corners tl bl br tr) = 1 - f tl - f bl - f br - f tr
+  where f (Complete _) = 1/8
+        f OutFlow = -1/8  -- For areas that "invade" their neighbours.
         f _ = 0
 {-# INLINE area #-}
 

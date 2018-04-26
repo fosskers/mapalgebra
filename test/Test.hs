@@ -188,15 +188,15 @@ fpartitionTest = actual @?= expected
 fshapeTest :: Assertion
 fshapeTest = actual @?= expected
  where expected :: Raster B p 3 3 (Corners Int)
-       expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open Open Open
+       expected = fromRight . fromVector Seq $ V.fromList [ Corners Open Open OutFlow Open
                                                           , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
+                                                          , Corners Open OutFlow Open Open
                                                           , Corners Open Open Open Open
                                                           , Corners (Complete 1) (Complete 1) (Complete 1) (Complete 1)
                                                           , Corners Open Open Open Open
+                                                          , Corners Open Open Open OutFlow
                                                           , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open
-                                                          , Corners Open Open Open Open ]
+                                                          , Corners OutFlow Open Open Open ]
        actual :: Raster B p 3 3 (Corners Int)
        actual = strict B . fshape . fromRight . fromVector Seq $ U.fromList [1,1,1,1,0,1,1,1,1]
 
@@ -222,9 +222,9 @@ fareaOpen = actual @?= expected
 fareaCentre :: Assertion
 fareaCentre = actual @?= expected
   where expected :: Raster U p 3 3 Double
-        expected = fromRight . fromVector Seq $ U.fromList [ 1, 1, 1
+        expected = fromRight . fromVector Seq $ U.fromList [ 1 + 1/8, 1, 1 + 1/8
                                                            , 1, 1/2, 1
-                                                           , 1, 1, 1 ]
+                                                           , 1 + 1/8, 1, 1 + 1/8 ]
         actual :: Raster U p 3 3 Double
         actual = strict U . farea . fshape . fromRight . fromVector Seq $ U.fromList ([0,0,0,0,1,0,0,0,0] :: [Int])
 
