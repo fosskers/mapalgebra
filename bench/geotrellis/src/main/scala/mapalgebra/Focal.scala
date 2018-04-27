@@ -13,14 +13,18 @@ import org.openjdk.jmh.annotations._
 @State(Scope.Thread)
 class FocalBench {
   var tile: Tile = _
+  // var huge: Tile = _
 
   @Setup
   def setup(): Unit = {
     tile = IntArrayTile.empty(512, 512).map { (c, r, _) => c * r }
+    // huge = UByteArrayTile.empty(46500, 46500).map { (c, r, _) => 5 }  // NegativeArraySizeException
   }
 
   @Benchmark
   def sum: Tile = tile.focalSum(Square(1))
+  // @Benchmark
+  // def sumHuge: Tile = huge.focalSum(Square(1))
   @Benchmark
   def mean: Tile = tile.focalMean(Square(1))
   @Benchmark
