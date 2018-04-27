@@ -291,6 +291,8 @@ data Point p = Point { x :: !Double, y :: !Double } deriving (Eq, Show)
 -- A Projection is also known as a Coordinate Reference System (CRS).
 --
 -- Use `reproject` to convert `Point`s between various Projections.
+--
+-- __Note:__ Full support for Projections is still pending.
 class Projection p where
   -- | Convert a `Point` in this Projection to one of radians on a perfect `Sphere`.
   toSphere :: Point p -> Point Sphere
@@ -312,18 +314,19 @@ instance Projection Sphere where
   toSphere = id
   fromSphere = id
 
+-- | Latitude (north-south position) and Longitude (east-west position).
 data LatLng
 
-instance Projection LatLng where
-  toSphere = undefined
-  fromSphere = undefined
+-- instance Projection LatLng where
+--   toSphere = undefined
+--   fromSphere = undefined
 
 -- | The most commonly used `Projection` for mapping in internet applications.
 data WebMercator
 
-instance Projection WebMercator where
-  toSphere = undefined
-  fromSphere = undefined
+-- instance Projection WebMercator where
+--   toSphere = undefined
+--   fromSphere = undefined
 
 -- | A rectangular grid of data representing some area on the earth.
 --
