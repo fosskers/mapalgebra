@@ -2,6 +2,18 @@ name:                mapalgebra
 version:             0.1.0
 synopsis:            Efficient, polymorphic Map Algebra.
 description:         Efficient, polymorphic Map Algebra.
+
+
+                     This library is an implementation of /Map Algebra/ as described in the
+                     book /GIS and Cartographic Modeling/ by Dana Tomlin. The fundamental
+                     type, the `Raster`, is typesafe. Rasters of different size and projection
+                     are considered different types, and so cannot be combined in any way.
+
+
+                     Also featured are op fusion (i.e. "lazy Rasters"), extremely fast
+                     Focal Operations, and typesafe NoData handling. Please see the
+                     main module for a more detailed introduction.
+
 homepage:            https://github.com/fosskers/mapalgebra
 license:             BSD3
 author:              Colin Woodbury
