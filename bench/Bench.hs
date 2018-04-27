@@ -5,7 +5,7 @@ module Main ( main ) where
 import           Criterion.Main
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A hiding (zipWith)
-import           Data.Monoid ((<>))
+import           Data.Monoid ((<>), Sum(..))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
 import           GHC.TypeLits
@@ -18,21 +18,26 @@ import           Prelude hiding (zipWith)
 
 main :: IO ()
 main = do
-  img   <- fileY
-  imgF  <- fileY
-  rgba  <- fileRGB
-  rgbaF <- fileRGB'
+  img   <- fileY "data/gray512.tif"
+  imgF  <- fileY "data/gray512.tif"
+  rgba  <- fileRGB "data/512x512.tif"
+  a512  <- fileRGB "data/512x512.tif"
+  -- a1024 <- fileRGB "data/1024x1024.tif"
+  -- a2048 <- fileRGB "data/2048x2048.tif"
+  -- a4096 <- fileRGB "data/4096x4096.tif"
+  -- let aHuge :: Raster S u 46500 46500 Word8
+  --     aHuge = fromFunction S Par (\(r :. c) -> fromIntegral $ r * c)
   defaultMain
     [
       creation
     , io
     , colouring img
     , massivOps img
-    , localOps rgba rgbaF img
+    , localOps rgba a512 img
     , hmatrix
     , conversions img
     , focalOps img imgF
-    , compositeOps rgbaF
+    , compositeOps a512 -- a1024 a2048 a4096
     ]
 
 creation :: Benchmark
@@ -48,9 +53,9 @@ creation = bgroup "Raster Creation"
 
 io :: Benchmark
 io = bgroup "IO"
-     [ bench "fromRGBA 512x512" $ nfIO (_array . _red <$> fileRGB)
-     , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array . _red <$> fileRGB')
-     , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY @Word8)
+     [ bench "fromRGBA 512x512" $ nfIO (_array . _red <$> fileRGB @Word8 @512 @512 "data/512x512.tif")
+     , bench "fromRGBA (Word8 -> Double) 512x512" $ nfIO (_array . _red <$> fileRGB @Double @512 @512 "data/512x512.tif")
+     , bench "fromGray Multiband 512x512"  $ nfIO (_array <$> fileY @Word8 @512 @512 "data/512x512.tif")
      , bench "fromGray Singleband 512x512" $ nfIO (_array <$> gray "data/gray512.tif") ]
 
 colouring :: Raster S p 512 512 Word8 -> Benchmark
@@ -99,7 +104,12 @@ conversions img = bgroup "Numeric Conversion"
 
 focalOps :: Raster S p 512 512 Word8 -> Raster S p 512 512 Double -> Benchmark
 focalOps img imgF = bgroup "Focal Operations"
-               [ bench "fsum" $ nf (_array . strict S . fsum) img
+               [ bgroup "fsum"
+                 [ bench "512"    $ nf (_array . strict S . fsum) img
+                 -- , bench "46500"  $ nf (_array . strict S . fsum) huge
+                 -- , bench "maybing" $ nf (_array . strict B . fmap Just . lazy) img
+                 , bench "nodata" $ nf (_array . strict S . nodatafsum) img
+                 ]
                , bgroup "fmean"
                  [ bench "Word8"  $ nf (_array . strict S . fmean @Word8 @Double) img
                  , bench "Double" $ nf (_array . strict S . fmean @Double @Double) imgF
@@ -144,14 +154,21 @@ focalOps img imgF = bgroup "Focal Operations"
 wtod :: Word8 -> Double
 wtod = realToFrac
 
-compositeOps :: RGBARaster p 512 512 Double -> Benchmark
-compositeOps i@(RGBARaster r g _ _) = bgroup "Composite Operations"
-                                      [ bench "NDVI" $ nf (_array . strict S . ndvi (lazy g)) (lazy r)
-                                      , bench "EVI"  $ nf (_array . strict S . evi) i
-                                      , bench "EVI + Colour" $ nf (_array . strict S . classify invisible cr . evi) i
-                                      , bench "EVI + Colour + PNG (D)" $ nf (png . classify invisible cr . evi) i
-                                      , bench "EVI + Colour + PNG (S)" $ nf (png . strict S . classify invisible cr . evi) i
-                                      ]
+compositeOps :: RGBARaster p 512 512 Double
+  -- -> RGBARaster p 1024 1024 Double
+  -- -> RGBARaster p 2048 2048 Double
+  -- -> RGBARaster p 4096 4096 Double
+  -> Benchmark
+compositeOps i@(RGBARaster r g _ _) =
+  bgroup "Composite Operations"
+  [ bench "NDVI" $ nf (_array . strict S . ndvi (lazy g)) (lazy r)
+  , bench "EVI (512)"    $ nf (_array . strict S . evi) i
+  -- , bench "EVI (1024)"   $ nf (_array . strict S . evi) a1024
+  -- , bench "EVI (2048)"   $ nf (_array . strict S . evi) a2048
+  -- , bench "EVI (4096)"   $ nf (_array . strict S . evi) a4096
+  , bench "EVI + Colour" $ nf (_array . strict S . classify invisible cr . evi) i
+  , bench "EVI + Colour + PNG (D)" $ nf (png . classify invisible cr . evi) i
+  , bench "EVI + Colour + PNG (S)" $ nf (png . strict S . classify invisible cr . evi) i ]
   where cr = greenRed $ fmap (10 ^) [1..10]
 
 fromRight :: Either a b -> b
@@ -197,27 +214,21 @@ gray fp = do
     Left err  -> error err
     Right img -> pure img
 
-fileY :: Elevator a => IO (Raster S p 512 512 a)
-fileY = do
-  i <- fromGray "data/512x512.tif"
+fileY :: (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Raster S p r c a)
+fileY fp = do
+  i <- fromGray fp
   case i of
     Left err  -> error err
     Right img -> pure img
 {-# INLINE fileY #-}
 
-fileRGB :: IO (RGBARaster p 512 512 Word8)
-fileRGB = do
-  i <- fromRGBA "data/512x512.tif"
+fileRGB :: (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (RGBARaster p r c a)
+fileRGB fp = do
+  i <- fromRGBA fp
   case i of
     Left err  -> error err
     Right img -> pure img
-
-fileRGB' :: IO (RGBARaster p 512 512 Double)
-fileRGB' = do
-  i <- fromRGBA "data/512x512.tif"
-  case i of
-    Left err  -> error err
-    Right img -> pure img
+{-# INLINE fileRGB #-}
 
 -- | See: https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index
 ndvi :: (KnownNat r, KnownNat c) => Raster D p r c Double -> Raster D p r c Double -> Raster D p r c Double
@@ -231,3 +242,9 @@ evi (RGBARaster r g b _) = 2.5 * (numer / denom)
         numer = nir - lazy r
         denom = nir + (6 * lazy r) - (7.5 * lazy b) + 1
 {-# INLINE evi #-}
+
+nodatafsum :: Raster S p 512 512 Word8 -> Raster DW p 512 512 Word8
+nodatafsum = fmap (maybe 0 getSum) . fmonoid . strict B . fmap check . lazy
+  where check 0 = Nothing
+        check n = Just $ Sum n
+{-# INLINE nodatafsum #-}
