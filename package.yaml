@@ -23,6 +23,7 @@ category:            Geography
 
 extra-source-files:
   - README.md
+  - CHANGELOG.md
   - data/*
 
 ghc-options:
