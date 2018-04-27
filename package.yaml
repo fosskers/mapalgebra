@@ -1,5 +1,5 @@
 name:                mapalgebra
-version:             1.0.0
+version:             0.1.0
 synopsis:            Efficient, polymorphic Map Algebra.
 description:         Efficient, polymorphic Map Algebra.
 homepage:            https://github.com/fosskers/mapalgebra
