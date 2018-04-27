@@ -114,9 +114,7 @@ module Geography.MapAlgebra
   , Point(..)
   -- * Map Algebra
   -- ** Local Operations
-  -- | Operations between `Raster`s. If the source Rasters aren't the
-  -- same size, the size of the result will be their intersection. All operations
-  -- are element-wise:
+  -- | Operations between `Raster`s. All operations are element-wise:
   --
   -- @
   -- 1 1 + 2 2  ==  3 3
@@ -494,8 +492,7 @@ fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp 
         c = fromInteger $ natVal (Proxy :: Proxy c)
 {-# INLINE fromVector #-}
 
--- | An RGBA image whose colour bands are distinct. Since each band starts as `D`,
--- any band you don't use won't consume extra memory.
+-- | An RGBA image whose colour bands are distinct.
 data RGBARaster p r c a = RGBARaster { _red   :: !(Raster S p r c a)
                                      , _green :: !(Raster S p r c a)
                                      , _blue  :: !(Raster S p r c a)
