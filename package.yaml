@@ -7,7 +7,7 @@ description:         Efficient, polymorphic Map Algebra.
                      This library is an implementation of /Map Algebra/ as described in the
                      book /GIS and Cartographic Modeling/ by Dana Tomlin. The fundamental
                      type, the `Raster`, is typesafe. Rasters of different size and projection
-                     are considered different types, and so cannot be combined in any way.
+                     are considered different types, and so cannot be combined mistakenly in any way.
 
 
                      Also featured are op fusion (i.e. "lazy Rasters"), extremely fast
@@ -37,7 +37,7 @@ ghc-options:
   # - -fllvm
 
 dependencies:
-  - base >= 4.9 && < 4.12
+  - base >= 4.10 && < 4.12
   - bytestring
   - containers
   - data-default
