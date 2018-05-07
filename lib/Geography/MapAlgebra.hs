@@ -96,6 +96,7 @@ module Geography.MapAlgebra
   -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
   -- output with functions like `writeImage`.
   , grayscale
+  , histogram
   , invisible
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
@@ -248,6 +249,7 @@ module Geography.MapAlgebra
 
 import           Control.Concurrent (getNumCapabilities)
 import           Control.DeepSeq (NFData(..), deepseq)
+import           Control.Monad.ST
 import           Data.Bits (testBit)
 import           Data.Bool (bool)
 import qualified Data.ByteString.Lazy as BL
@@ -268,6 +270,7 @@ import qualified Data.Set as S
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Storable as VS
+import qualified Data.Vector.Storable.Mutable as VSM
 import           Data.Word
 import           GHC.TypeLits
 import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..), ColorSpace)
@@ -531,11 +534,11 @@ spreadRGBA arr = do
   mb <- A.unsafeNew sz
   mg <- A.unsafeNew sz
   ma <- A.unsafeNew sz
-  flip A.imapP_ arr $ \ix (PixelRGBA r g b a) -> do
-    A.unsafeWrite mr ix r
-    A.unsafeWrite mg ix g
-    A.unsafeWrite mb ix b
-    A.unsafeWrite ma ix a
+  flip A.imapP_ arr $ \i (PixelRGBA r g b a) -> do
+    A.unsafeWrite mr i r
+    A.unsafeWrite mg i g
+    A.unsafeWrite mb i b
+    A.unsafeWrite ma i a
   ar <- A.unsafeFreeze (getComp arr) mr
   ag <- A.unsafeFreeze (getComp arr) mg
   ab <- A.unsafeFreeze (getComp arr) mb
@@ -1245,3 +1248,50 @@ drainage = Drain . S.foldl' f 0
           SouthWest -> acc + 32
           South     -> acc + 64
           SouthEast -> acc + 128
+
+-------------------------------
+-- TESTING HISTOGRAM ALGORITHMS
+-------------------------------
+
+{-
+histV :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (V.Vector Word)
+histV (Raster a) = foldlP g (V.replicate 256 0) f (V.replicate 256 0) a
+  where g v w = v & ix (fromIntegral w) %~ succ
+        f v u = V.zipWith (+) v u
+
+histU :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (U.Vector Word)
+histU (Raster a) = foldlP g (U.replicate 256 0) f (U.replicate 256 0) a
+  where g v w = v & ix (fromIntegral w) %~ succ
+        f v u = U.zipWith (+) v u
+
+histU' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
+histU' (Raster a) = foldlS g (U.replicate 256 0) a
+  where g v w = v & ix (fromIntegral w) %~ succ
+
+histS :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (VS.Vector Word)
+histS (Raster a) = foldlP g (VS.replicate 256 0) f (VS.replicate 256 0) a
+  where g v w = v & ix (fromIntegral w) %~ succ
+        f v u = VS.zipWith (+) v u
+
+histMut :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (U.Vector Word)
+histMut (Raster a) = foldlP g (U.replicate 256 0) f (U.replicate 256 0) a
+  where g v w = U.modify (\vm -> UM.unsafeModify vm succ (fromIntegral w)) v
+        f v u = U.zipWith (+) v u
+
+histMut' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
+histMut' (Raster a) = foldlS g (U.replicate 256 0) a
+  where g v w = U.modify (\vm -> UM.unsafeModify vm succ (fromIntegral w)) v
+
+histMut'' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
+histMut'' (Raster a) = runST $ do
+  acc <- UM.replicate 256 0
+  A.mapM_ (\w -> UM.unsafeModify acc succ (fromIntegral w)) a
+  U.unsafeFreeze acc
+-}
+
+histogram :: Source u Ix2 Word8 => Raster u p r c Word8 -> VS.Vector Word
+histogram (Raster a) = runST $ do
+  acc <- VSM.replicate 256 0
+  A.mapM_ (\w -> VSM.unsafeModify acc succ (fromIntegral w)) a
+  VS.unsafeFreeze acc
+{-# INLINE histogram #-}

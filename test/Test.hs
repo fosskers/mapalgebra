@@ -25,10 +25,12 @@ import           Test.Tasty.QuickCheck
 ---
 
 main :: IO ()
-main = defaultMain suite
+main = do
+  img <- fromRight <$> fromGray "data/gray512.tif"
+  defaultMain $ suite img
 
-suite :: TestTree
-suite = testGroup "Unit Tests"
+suite :: Raster S p 512 512 Word8 -> TestTree
+suite r = testGroup "Unit Tests"
   [ testGroup "Raster Creation"
     [ testCase "constant (256x256)"     $ length (lazy small) @?= 65536
     , testCase "constant (2^16 x 2^16)" $ length lazybig @?= 4294967296
@@ -96,7 +98,14 @@ suite = testGroup "Unit Tests"
       , testCase "3x3 Flat" fupstreamFlat
       ]
     ]
+  , testGroup "Histograms"
+    [ -- testCase "Immutable == Mutable" $ hists r
+    ]
   ]
+
+fromRight :: Either a b -> b
+fromRight (Right b) = b
+fromRight _ = error "Was Left"
 
 one :: Raster P p 7 7 Word
 one = constant P Seq 1
@@ -115,6 +124,9 @@ lazybig = constant D Par 5
 
 -- bog :: Raster P p 65536 65536 Word8
 -- bog = constant P Par 10
+
+-- indices :: Raster S p 512 512 Word8
+-- indices = fromFunction S Par (\(r :. c) -> fromIntegral $ r + c)
 
 fileRGBA :: IO (Either String (RGBARaster p 512 512 Word8))
 fileRGBA = fromRGBA "data/512x512.tif"
@@ -170,10 +182,6 @@ flengthTest = actual @?= expected
         actual = strict U . flength . flinkage . fromRight . fromVector Seq $ VS.fromList ([1,2,1,2,2,2,1,2,1] :: [Int])
         expected :: Raster U p 3 3 Double
         expected = fromRight . fromVector Seq $ U.fromList [ 0, 0.5, 0, 0.5, 2, 0.5, 0, 0.5, 0 ]
-
-fromRight :: Either a b -> b
-fromRight (Right b) = b
-fromRight _ = error "Was Left"
 
 fpartitionTest :: Assertion
 fpartitionTest = actual @?= expected
@@ -336,3 +344,15 @@ fupstreamPeak :: Assertion
 fupstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= Drain 0
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fupstream . strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
+
+{-
+hists :: Raster S p 512 512 Word8 -> Assertion
+hists r = do
+  u  <- histU r
+  um <- histMut r
+  histU' r @?= u
+  histMut' r @?= um
+  histMut'' r @?= um
+  histMut'' r @?= u
+  um @?= u
+-}
