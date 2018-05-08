@@ -1300,7 +1300,7 @@ histogram (Raster a) = runST $ do
 {-# INLINE histogram #-}
 
 breaks :: Histogram -> [Word8]
-breaks (Histogram h) = take 10 . reverse . snd . VS.ifoldl' f (binWidth, []) $ VS.postscanl' (+) 0 h
+breaks (Histogram h) = take 10 . (1 :) . reverse . snd . VS.ifoldl' f (binWidth, []) $ VS.postscanl' (+) 0 h
   where binWidth     = VS.sum h `div` 11  -- Yes, 11 and not 10.
         f a@(goal, acc) i n | n > goal  = (next n goal, fromIntegral i : acc)
                             | otherwise = a
@@ -1317,5 +1317,5 @@ testy = do
   case ei of
     Left err -> putStrLn err
     Right r  -> do
-      let cm = blueGreen . breaks $ histogram r
+      let cm = greenRed . breaks $ histogram r
       displayImage . _array . strict S . classify invisible cm $ lazy r
