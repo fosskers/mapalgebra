@@ -84,14 +84,21 @@ module Geography.MapAlgebra
   -- *** Creation
   , constant, fromFunction, fromVector, fromRGBA, fromGray
   -- *** Colouring
-  -- | The `M.Map`s here can be used with `classify` to
-  --   transform /ranges/ of values into certain colours in \(\mathcal{O}(n\log(n))\).
-  --   Each Map-generating function (like `greenRed`) creates a "colour ramp" of 10 colours. So, it expects
-  --   to be given a list of 10 "break points" which become the Map's keys. Any less than 10 will result
-  --   in the later colours not being used. Any more than 10 will be ignored. The list of break points is
-  --   assumed to be sorted.
-  --   `invisible` can be used as the default value to `classify`, to make invisible any value that falls outside
-  --   the range of the Maps.
+  -- | To colour a `Raster`:
+  --
+  -- 1. Fully evaluate it with `strict` `S`.
+  -- 2. Use `histogram` to analyse the spread of its values. Currently only `Word8` is supported.
+  -- 3. Use `breaks` on the `Histogram` to generate a list of "break points".
+  -- 4. Pass the break points to a function like `greenRed` to generate a "colour ramp" (a `M.Map`).
+  -- 5. Use this ramp with `classify` to colour your `Raster` in \(\mathcal{O}(n\log(n))\).
+  --    `invisible` can be used as the default colour for values that fall outside the range
+  --    of the Map.
+  --
+  -- @
+  -- colourIt :: Raster D p r c Word8 -> Raster S p r c (Pixel RGBA Word8)
+  -- colourIt (strict S -> r) = strict S . classify invisible cm $ lazy r
+  --   where cm = blueGreen . breaks $ histogram r
+  -- @
   --
   -- If you aren't interested in colour but still want to render your `Raster`,
   -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
@@ -1250,48 +1257,11 @@ drainage = Drain . S.foldl' f 0
           South     -> acc + 64
           SouthEast -> acc + 128
 
--------------------------------
--- TESTING HISTOGRAM ALGORITHMS
--------------------------------
+-- | A count of `Word8` values across some `Raster`.
+newtype Histogram = Histogram { _histogram :: (VS.Vector Word) } deriving (Eq, Show)
 
-{-
-histV :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (V.Vector Word)
-histV (Raster a) = foldlP g (V.replicate 256 0) f (V.replicate 256 0) a
-  where g v w = v & ix (fromIntegral w) %~ succ
-        f v u = V.zipWith (+) v u
-
-histU :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (U.Vector Word)
-histU (Raster a) = foldlP g (U.replicate 256 0) f (U.replicate 256 0) a
-  where g v w = v & ix (fromIntegral w) %~ succ
-        f v u = U.zipWith (+) v u
-
-histU' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
-histU' (Raster a) = foldlS g (U.replicate 256 0) a
-  where g v w = v & ix (fromIntegral w) %~ succ
-
-histS :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (VS.Vector Word)
-histS (Raster a) = foldlP g (VS.replicate 256 0) f (VS.replicate 256 0) a
-  where g v w = v & ix (fromIntegral w) %~ succ
-        f v u = VS.zipWith (+) v u
-
-histMut :: Source u Ix2 Word8 => Raster u p r c Word8 -> IO (U.Vector Word)
-histMut (Raster a) = foldlP g (U.replicate 256 0) f (U.replicate 256 0) a
-  where g v w = U.modify (\vm -> UM.unsafeModify vm succ (fromIntegral w)) v
-        f v u = U.zipWith (+) v u
-
-histMut' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
-histMut' (Raster a) = foldlS g (U.replicate 256 0) a
-  where g v w = U.modify (\vm -> UM.unsafeModify vm succ (fromIntegral w)) v
-
-histMut'' :: Source u Ix2 Word8 => Raster u p r c Word8 -> U.Vector Word
-histMut'' (Raster a) = runST $ do
-  acc <- UM.replicate 256 0
-  A.mapM_ (\w -> UM.unsafeModify acc succ (fromIntegral w)) a
-  U.unsafeFreeze acc
--}
-
-newtype Histogram = Histogram { _histogram :: (VS.Vector Word) }
-
+-- | Given a `Raster` of byte data, efficiently produce a `Histogram` that
+-- describes value counts across the image. To be passed to `breaks`.
 histogram :: Source u Ix2 Word8 => Raster u p r c Word8 -> Histogram
 histogram (Raster a) = runST $ do
   acc <- VSM.replicate 256 0
@@ -1299,6 +1269,8 @@ histogram (Raster a) = runST $ do
   Histogram <$> VS.unsafeFreeze acc
 {-# INLINE histogram #-}
 
+-- | Given a `Histogram`, produce a list of "colour breaks" as needed by
+-- functions like `greenRed`.
 breaks :: Histogram -> [Word8]
 breaks (Histogram h) = take 10 . (1 :) . reverse . snd . VS.ifoldl' f (binWidth, []) . VS.postscanl' (+) 0 $ VS.tail h
   where binWidth     = VS.sum (VS.tail h) `div` 11  -- Yes, 11 and not 10.
@@ -1308,9 +1280,6 @@ breaks (Histogram h) = take 10 . (1 :) . reverse . snd . VS.ifoldl' f (binWidth,
                     | otherwise = goal + binWidth
 
 {-
-[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,35,0,2,0,16,3,45,193,20,0,0,2,146,177,2,1,2,1191,126,13,564,144,1755,1058,90,336,715,13717,147,18024,41,35,4562,58,61426,2939,92,3839,17,20503,5984,8997,13940,1450,5934,1033,10503,2681,1657,4705,291,1875,3727,452,3785,1443,2164,1760,221,2640,1314,577,2088,1033,2377,990,1506,1398,1244,1335,725,1500,1624,438,1785,891,1585,1015,547,2031,398,443,1401,436,1227,664,840,1017,525,1108,195,712,520,770,539,135,1048,156,883,175,255,671,88,492,358,364,405,278,482,170,425,208,388,258,296,302,198,318,178,341,272,328,186,269,241,250,296,240,188,153,438,119,227,261,214,170,71,266,339,68,424,70,320,174,74,269,144,123,111,200,52,71,166,65,76,59,80,55,45,67,47,69,49,31,57,36,50,30,30,26,24,39,29,31,7,21,13,19,21,23,24,20,21,12,30,11,9,27,21,4,9,14,9,6,17,14,9,8,18,11,2,4,10,21,2,3,24,14,0,10,19,6,1,10,21,0,1,19,6,0,0,28,0,0,0,34,0,774]
--}
-
 testy :: IO ()
 testy = do
   ei <- fromGray @WebMercator @1753 @1760 "data/gray.tif"
@@ -1319,3 +1288,4 @@ testy = do
     Right r  -> do
       let cm = blueGreen . breaks $ histogram r
       displayImage . _array . strict S . classify invisible cm $ lazy r
+-}
