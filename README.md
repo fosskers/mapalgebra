@@ -21,7 +21,7 @@ This library provides `Raster`s which are lazy, polymorphic, and typesafe. They
 can hold any kind of data, and are aware of their projection and dimensions
 at the type level. This means that imagery of different size or projection
 are considered completely different types, which prevents an entire class
-of potential bugs.
+of bugs.
 
 `Raster`s have types signatures like this:
 
@@ -39,6 +39,8 @@ Raster D WebMercator 512 512 Word8
 
 -- | A "windowed" Raster of an ADT, the result of some Focal Operation.
 -- Waiting to be evaluated by the `strict` function.
+--
+-- A generic `p` means we don't care about Projection here.
 Raster DW p 1024 1024 (Maybe Double)
 ```
 
@@ -93,8 +95,23 @@ invisible :: Pixel RGBA Word8
 
 -- | Given a list of "breaks", forms a colour ramp to be passed
 -- to `classify`.
-greenRed :: Ord k => [k] -> Map k (Pixel RGBA Word8)
+spectrum :: Ord k => [k] -> Map k (Pixel RGBA Word8)
 ```
+
+We can generate the breaks via `histogram` and `breaks`:
+
+```haskell
+-- | Input here is `Raster S`, meaning this image was freshly read,
+-- or has already been fully computed with `strict`.
+colourIt :: Raster S p r c Word8 -> Raster S p r c (Pixel RGBA Word8)
+colourIt r = strict S . classify invisible cm $ lazy r
+  where cm = spectrum . breaks $ histogram r
+```
+
+Before-and-after:
+
+![original image](data/gray.png)
+![colour via spectrum ramp](data/spectrum.png)
 
 ### Local Operations
 
@@ -142,7 +159,6 @@ that handle any Focal scenario imaginable.
 ## Future Work
 
 - Projection handling at IO time
-- Histograms for colour ramp generation
 - Reprojections
 - Extended neighbourhoods for Focal Ops
 - Upsampling and Downsampling
