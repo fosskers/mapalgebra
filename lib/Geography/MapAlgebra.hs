@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples, TypeInType #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -1258,14 +1257,14 @@ drainage = Drain . S.foldl' f 0
           SouthEast -> acc + 128
 
 -- | A count of `Word8` values across some `Raster`.
-newtype Histogram = Histogram { _histogram :: (VS.Vector Word) } deriving (Eq, Show)
+newtype Histogram = Histogram { _histogram :: VS.Vector Word } deriving (Eq, Show)
 
 -- | Given a `Raster` of byte data, efficiently produce a `Histogram` that
 -- describes value counts across the image. To be passed to `breaks`.
 histogram :: Source u Ix2 Word8 => Raster u p r c Word8 -> Histogram
 histogram (Raster a) = runST $ do
   acc <- VSM.replicate 256 0
-  A.mapM_ (\w -> VSM.unsafeModify acc succ (fromIntegral w)) a
+  A.mapM_ (VSM.unsafeModify acc succ . fromIntegral) a
   Histogram <$> VS.unsafeFreeze acc
 {-# INLINE histogram #-}
 
