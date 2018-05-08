@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples, TypeInType #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -96,7 +97,7 @@ module Geography.MapAlgebra
   -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
   -- output with functions like `writeImage`.
   , grayscale
-  , histogram
+  , Histogram(..), histogram, breaks
   , invisible
   , greenRed, spectrum, blueGreen, purpleYellow, brownBlue
   , grayBrown, greenPurple, brownYellow, purpleGreen, purpleRed
@@ -567,7 +568,7 @@ invisible = PixelRGBA 0 0 0 0
 -- | Construct a colour ramp.
 -- ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k PixelRGBA8
 ramp :: Ord k => [(Word8, Word8, Word8)] -> [k] -> M.Map k (Pixel RGBA Word8)
-ramp colours breaks = M.fromList . P.zip breaks $ P.map (\(r,g,b) -> PixelRGBA r g b maxBound) colours
+ramp colours bs = M.fromList . P.zip bs $ P.map (\(r,g,b) -> PixelRGBA r g b maxBound) colours
 {-# INLINE ramp #-}
 
 -- | From page 32 of /Cartographer's Toolkit/.
@@ -1289,9 +1290,32 @@ histMut'' (Raster a) = runST $ do
   U.unsafeFreeze acc
 -}
 
-histogram :: Source u Ix2 Word8 => Raster u p r c Word8 -> VS.Vector Word
+newtype Histogram = Histogram { _histogram :: (VS.Vector Word) }
+
+histogram :: Source u Ix2 Word8 => Raster u p r c Word8 -> Histogram
 histogram (Raster a) = runST $ do
   acc <- VSM.replicate 256 0
   A.mapM_ (\w -> VSM.unsafeModify acc succ (fromIntegral w)) a
-  VS.unsafeFreeze acc
+  Histogram <$> VS.unsafeFreeze acc
 {-# INLINE histogram #-}
+
+breaks :: Histogram -> [Word8]
+breaks (Histogram h) = take 10 . reverse . snd . VS.ifoldl' f (binWidth, []) $ VS.postscanl' (+) 0 h
+  where binWidth     = VS.sum h `div` 11  -- Yes, 11 and not 10.
+        f a@(goal, acc) i n | n > goal  = (next n goal, fromIntegral i : acc)
+                            | otherwise = a
+        next n goal | (n - goal) > binWidth = goal + (binWidth * (((n - goal) `div` binWidth) + 1))
+                    | otherwise = goal + binWidth
+
+{-
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,35,0,2,0,16,3,45,193,20,0,0,2,146,177,2,1,2,1191,126,13,564,144,1755,1058,90,336,715,13717,147,18024,41,35,4562,58,61426,2939,92,3839,17,20503,5984,8997,13940,1450,5934,1033,10503,2681,1657,4705,291,1875,3727,452,3785,1443,2164,1760,221,2640,1314,577,2088,1033,2377,990,1506,1398,1244,1335,725,1500,1624,438,1785,891,1585,1015,547,2031,398,443,1401,436,1227,664,840,1017,525,1108,195,712,520,770,539,135,1048,156,883,175,255,671,88,492,358,364,405,278,482,170,425,208,388,258,296,302,198,318,178,341,272,328,186,269,241,250,296,240,188,153,438,119,227,261,214,170,71,266,339,68,424,70,320,174,74,269,144,123,111,200,52,71,166,65,76,59,80,55,45,67,47,69,49,31,57,36,50,30,30,26,24,39,29,31,7,21,13,19,21,23,24,20,21,12,30,11,9,27,21,4,9,14,9,6,17,14,9,8,18,11,2,4,10,21,2,3,24,14,0,10,19,6,1,10,21,0,1,19,6,0,0,28,0,0,0,34,0,774]
+-}
+
+testy :: IO ()
+testy = do
+  ei <- fromGray @WebMercator @512 @512 "data/gray512.tif"
+  case ei of
+    Left err -> putStrLn err
+    Right r  -> do
+      let cm = blueGreen . breaks $ histogram r
+      displayImage . _array . strict S . classify invisible cm $ lazy r

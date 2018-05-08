@@ -6,6 +6,7 @@
 module Main ( main ) where
 
 import           Data.Int
+import           Data.List (sort)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A
 import qualified Data.Set as S
@@ -100,6 +101,12 @@ suite r = testGroup "Unit Tests"
     ]
   , testGroup "Histograms"
     [ -- testCase "Immutable == Mutable" $ hists r
+      testCase "Total Sum"     $ VS.sum (_histogram $ histogram r) @?= 262144
+    , testCase "10 Breaks"     $ length (breaks $ histogram r) @?= 10
+    , testCase "Sorted Breaks" $ do
+        let bs = breaks $ histogram r
+        print bs
+        sort bs @?= bs
     ]
   ]
 
