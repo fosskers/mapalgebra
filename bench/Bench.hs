@@ -5,7 +5,7 @@ module Main ( main ) where
 import           Criterion.Main
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A hiding (zipWith)
-import           Data.Monoid ((<>), Sum(..))
+import           Data.Monoid ((<>))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
 import           GHC.TypeLits
@@ -38,6 +38,7 @@ main = do
     , conversions img
     , focalOps img imgF
     , compositeOps a512 -- a1024 a2048 a4096
+    , histograms img
     ]
 
 creation :: Benchmark
@@ -108,7 +109,7 @@ focalOps img imgF = bgroup "Focal Operations"
                  [ bench "512"    $ nf (_array . strict S . fsum) img
                  -- , bench "46500"  $ nf (_array . strict S . fsum) huge
                  -- , bench "maybing" $ nf (_array . strict B . fmap Just . lazy) img
-                 , bench "nodata" $ nf (_array . strict S . nodatafsum) img
+                 -- , bench "nodata" $ nf (_array . strict S . nodatafsum) img
                  ]
                , bgroup "fmean"
                  [ bench "Word8"  $ nf (_array . strict S . fmean @Word8 @Double) img
@@ -243,8 +244,13 @@ evi (RGBARaster r g b _) = 2.5 * (numer / denom)
         denom = nir + (6 * lazy r) - (7.5 * lazy b) + 1
 {-# INLINE evi #-}
 
-nodatafsum :: Raster S p 512 512 Word8 -> Raster DW p 512 512 Word8
-nodatafsum = fmap (maybe 0 getSum) . fmonoid . strict B . fmap check . lazy
-  where check 0 = Nothing
-        check n = Just $ Sum n
-{-# INLINE nodatafsum #-}
+-- nodatafsum :: Raster S p 1753 1760 Double -> Raster DW p 1753 1760 Double
+-- nodatafsum = fmap (maybe 0 ((/9) . getSum)) . fmonoid . strict B . fmap check . lazy
+--   where check 0 = Nothing
+--         check n = Just $ Sum n
+-- {-# INLINE nodatafsum #-}
+
+histograms :: Raster S p 512 512 Word8 -> Benchmark
+histograms r = bgroup "Histogram Algorithms"
+  [ bench "Storable Super Mutable" $ nf (_histogram . histogram) r
+  ]

@@ -1278,14 +1278,3 @@ breaks (Histogram h) = take 10 . (1 :) . reverse . snd . VS.ifoldl' f (binWidth,
                             | otherwise = a
         next n goal | (n - goal) > binWidth = goal + (binWidth * (((n - goal) `div` binWidth) + 1))
                     | otherwise = goal + binWidth
-
-{-
-testy :: IO ()
-testy = do
-  ei <- fromGray @WebMercator @1753 @1760 "data/gray.tif"
-  case ei of
-    Left err -> putStrLn err
-    Right r  -> do
-      let cm = blueGreen . breaks $ histogram r
-      displayImage . _array . strict S . classify invisible cm $ lazy r
--}

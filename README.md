@@ -98,7 +98,7 @@ invisible :: Pixel RGBA Word8
 spectrum :: Ord k => [k] -> Map k (Pixel RGBA Word8)
 ```
 
-We can generate the breaks via `histogram` and `breaks`:
+We can generate the breaks via `histogram` and `breaks` (currently supports `Word8` only):
 
 ```haskell
 -- | Input here is `Raster S`, meaning this image was freshly read,
@@ -159,6 +159,7 @@ that handle any Focal scenario imaginable.
 ## Future Work
 
 - Projection handling at IO time
+- Histogram generation for more data types
 - Reprojections
 - Extended neighbourhoods for Focal Ops
 - Upsampling and Downsampling
