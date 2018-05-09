@@ -112,9 +112,16 @@ module Geography.MapAlgebra
   -- @Raster u p r c (Pixel RGBA Word8)@. Then unwrap it with `_array` and output
   -- with something like `writeImage`.
   --
-  -- For quick debugging, you can visualize a `Raster` with `display`.
+  -- For quick debugging, you can visualize a `Raster` with `displayImage`:
+  --
+  -- @
+  -- raster :: Raster D p 512 512 Word8
+  --
+  -- >>> displayImage . _array . strict S . grayscale
+  -- @
   , writeImage, writeImageAuto
-  , png, display
+  , displayImage
+  , png
   -- ** Projections
   , Projection(..)
   , reproject
@@ -642,12 +649,6 @@ purpleRed = ramp colours
 grayscale :: Functor (Raster u p r c) => Raster u p r c a -> Raster u p r c (Pixel Y a)
 grayscale = fmap PixelY
 {-# INLINE grayscale #-}
-
--- | View a `Raster` as grayscale with the default image viewer of your OS.
---
--- For more direct control, consider `displayImage` from 'massiv-io'.
-display :: (Functor (Raster u p r c), Load u Ix2 (Pixel Y a), Elevator a) => Raster u p r c a -> IO ()
-display = displayImage . computeAs S . _array . grayscale
 
 -- | Render a PNG-encoded `BL.ByteString` from a coloured `Raster`.
 -- Useful for returning a `Raster` from a webserver endpoint.
