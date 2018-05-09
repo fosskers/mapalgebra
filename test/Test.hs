@@ -8,7 +8,7 @@ module Main ( main ) where
 import           Data.Int
 import           Data.List (sort)
 import           Data.List.NonEmpty (NonEmpty(..))
-import           Data.Massiv.Array as A
+import           Data.Massiv.Array (getComp, index')
 import qualified Data.Set as S
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U

@@ -259,6 +259,11 @@ module Geography.MapAlgebra
   , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
   -- * Utilities
   , leftPseudo, tau
+  -- * Massiv Re-exports
+  -- | For your convenience.
+  , D(..), DW(..), S(..), P(..), U(..), B(..), N(..)
+  , Ix2(..), Comp(..)
+  , Pixel(..), RGBA, Y
   ) where
 
 import           Control.Concurrent (getNumCapabilities)
