@@ -1,6 +1,7 @@
 import numpy as np
 import rasterio
 import timeit
+import gc
 
 # Get cell types of each band:
 # {i: dtype for i, dtype in zip(dataset.indexes, dataset.dtypes)}
@@ -54,11 +55,17 @@ def singleband():
 def fmap17(npa):
     return npa + 17
 
-def lsum(npa):
-    return npa + npa
+def lsum(a, b):
+    return a + b
 
-def ldiv(npa):
-    return npa / npa
+def ldiv(a, b):
+    return a / b
+
+def lmean(a, b, c):
+    return (a + b + c) / 3
+
+def lmax(a, b):
+    return np.maximum(a, b)
 
 # --- COMPOSITE OPS --- #
 
@@ -85,9 +92,11 @@ if __name__ == '__main__':
 
     print("")
     print("LOCAL OPS (ms)")
-    print(timeit.timeit("fmap17(red)", number = 50, globals = globals()) * 20)
-    print(timeit.timeit("lsum(red)", number = 50, globals = globals()) * 20)
-    print(timeit.timeit("ldiv(red)", number = 50, globals = globals()) * 20)
+    # print(timeit.timeit("fmap17(red)", number = 10000, globals = globals()))
+    print(timeit.repeat("lsum(red, blue)", "gc.enable()", repeat = 3, number = 10000, globals = globals()))
+    print(timeit.repeat("ldiv(red, blue)", "gc.enable()", repeat = 3, number = 10000, globals = globals()))
+    print(timeit.repeat("lmean(red, green, blue)", "gc.enable()", repeat = 3, number = 10000, globals = globals()))
+    print(timeit.repeat("lmax(red, green)", "gc.enable()", repeat = 3, number = 10000, globals = globals()))
 
     print("")
     print("COMPOSITE OPS (ms)")
