@@ -9,8 +9,10 @@
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE UnboxedTuples              #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
@@ -386,9 +388,9 @@ newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
 -- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
 -- `Raster` for display. This should only be used for debugging.
--- instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
---   show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
---     where (r :. c) = liftIndex (P.min 10) $ size a
+instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
+  show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
+    where (r :. c) = liftIndex (P.min 10) $ size a
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
