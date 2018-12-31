@@ -1,24 +1,33 @@
-{-# LANGUAGE Rank2Types, DataKinds, KindSignatures, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE ApplicativeDo, BangPatterns, UnboxedTuples, TypeInType #-}
-{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, DeriveAnyClass #-}
+{-# LANGUAGE ApplicativeDo              #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeInType                 #-}
+{-# LANGUAGE UnboxedTuples              #-}
 
 -- |
 -- Module    : Geography.MapAlgebra
--- Copyright : (c) Colin Woodbury, 2018
+-- Copyright : (c) Colin Woodbury, 2018 - 2019
 -- License   : BSD3
 -- Maintainer: Colin Woodbury <colin@fosskers.ca>
 --
--- This library is an implementation of /Map Algebra/ as described in the
--- book /GIS and Cartographic Modeling/ (GaCM) by Dana Tomlin. The fundamental
+-- This library is an implementation of /Map Algebra/ as described in the book
+-- /GIS and Cartographic Modeling/ (GaCM) by Dana Tomlin. The fundamental
 -- primitive is the `Raster`, a rectangular grid of data that usually describes
 -- some area on the earth. A `Raster` need not contain numerical data, however,
 -- and need not just represent satellite imagery. It is essentially a matrix,
 -- which of course forms a `Functor`, and thus is available for all the
--- operations we would expect to run on any Functor. /GIS and Cartographic Modeling/
--- doesn't lean on this fact, and so describes many seemingly custom
--- operations which to Haskell are just applications of `fmap` or `zipWith`
--- with pure functions.
+-- operations we would expect to run on any Functor. /GIS and Cartographic
+-- Modeling/ doesn't lean on this fact, and so describes many seemingly custom
+-- operations which to Haskell are just applications of `fmap` or `zipWith` with
+-- pure functions.
 --
 -- Here are the main classes of operations ascribed to /Map Algebra/ and their
 -- corresponding approach in Haskell:
@@ -28,17 +37,18 @@
 -- * /Focal Operations/ -> 'massiv'-based smart `Stencil` operations
 -- * /Zonal Operations/ -> Not yet implemented
 --
--- Whether it is meaningful to perform operations between two given
--- `Raster`s (i.e. whether the Rasters properly overlap on the earth) is not
--- handled in this library and is left to the application.
+-- Whether it is meaningful to perform operations between two given `Raster`s
+-- (i.e. whether the Rasters properly overlap on the earth) is not handled in
+-- this library and is left to the application.
 --
--- The "colour ramp" generation functions (like `greenRed`) gratefully borrow colour
--- sets from Gretchen N. Peterson's book /Cartographer's Toolkit/.
+-- The "colour ramp" generation functions (like `greenRed`) gratefully borrow
+-- colour sets from Gretchen N. Peterson's book /Cartographer's Toolkit/.
 --
 -- === A Word on Massiv: Fused, Parallel Arrays
--- Thanks to the underlying `Array` library [massiv](https://hackage.haskell.org/package/massiv),
--- most operations over and between Rasters are /fused/, meaning that no extra memory
--- is allocated in between each step of a composite operation.
+-- Thanks to the underlying `Array` library
+-- [massiv](https://hackage.haskell.org/package/massiv), most operations over
+-- and between Rasters are /fused/, meaning that no extra memory is allocated in
+-- between each step of a composite operation.
 --
 -- Take the [Enhanced Vegetation Index](https://en.wikipedia.org/wiki/Enhanced_vegetation_index)
 -- calculation:
@@ -50,28 +60,30 @@
 --         denom = nir + (6 * red) - (7.5 * blue) + 1
 -- @
 --
--- 8 binary operators are used here, but none allocate new memory. It's only when
--- some `lazy` Raster is made `strict` that calculations occur and memory is allocated.
+-- 8 binary operators are used here, but none allocate new memory. It's only
+-- when some `lazy` Raster is made `strict` that calculations occur and memory
+-- is allocated.
 --
 -- Provided your machine has more than 1 CPU, Rasters read by functions like
--- `fromRGBA` will automatically be in `Par`allel mode. This means that
--- forcing calculations with `strict` will cause evaluation to be done
--- with every CPU your machine has. The effect of this is quite potent for Focal
--- Operations, which yield special, cache-friendly windowed (`DW`) Rasters.
+-- `fromRGBA` will automatically be in `Par`allel mode. This means that forcing
+-- calculations with `strict` will cause evaluation to be done with every CPU
+-- your machine has. The effect of this is quite potent for Focal Operations,
+-- which yield special, cache-friendly windowed (`DW`) Rasters.
 --
 -- Familiarity with Massiv will help in using this library. A guide
 -- [can be found here](https://github.com/lehins/massiv).
 --
 -- === Compilation Options for Best Performance
--- When using this library, always compile your project with @-threaded@ and @-with-rtsopts=-N@.
--- These will ensure your executables will automatically use all the available CPU cores.
+-- When using this library, always compile your project with @-threaded@ and
+-- @-with-rtsopts=-N@. These will ensure your executables will automatically use
+-- all the available CPU cores.
 --
--- As always, @-O2@ is your friend. The @{-\# INLINE ... \#-}@ pragma is also very likely
--- to improve the performance of code that uses functions from this library. Make sure
--- to benchmark proactively.
+-- As always, @-O2@ is your friend. The @{-\# INLINE ... \#-}@ pragma is also
+-- very likely to improve the performance of code that uses functions from this
+-- library. Make sure to benchmark proactively.
 --
--- For particularly mathy operations like `fmean`, compiling with @-fllvm@ grants
--- about a 2x speedup.
+-- For particularly mathy operations like `fmean`, compiling with @-fllvm@
+-- grants about a 2x speedup.
 
 module Geography.MapAlgebra
   (
@@ -278,8 +290,8 @@ import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
-import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array hiding (zipWith)
+import qualified Data.Massiv.Array as A
 import           Data.Massiv.Array.IO
 import qualified Data.Massiv.Array.Manifest.Vector as A
 import           Data.Massiv.Array.Unsafe as A
@@ -292,10 +304,10 @@ import qualified Data.Vector.Storable as VS
 import qualified Data.Vector.Storable.Mutable as VSM
 import           Data.Word
 import           GHC.TypeLits
-import           Graphics.ColorSpace (Elevator, RGBA, Y, Pixel(..), ColorSpace)
+import           Graphics.ColorSpace (ColorSpace, Elevator, Pixel(..), RGBA, Y)
 import qualified Numeric.LinearAlgebra as LA
-import qualified Prelude as P
 import           Prelude hiding (zipWith)
+import qualified Prelude as P
 import           Text.Printf (printf)
 
 --
@@ -376,9 +388,9 @@ newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
 -- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
 -- `Raster` for display. This should only be used for debugging.
-instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
-  show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
-    where (r :. c) = liftIndex (P.min 10) $ size a
+-- instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
+--   show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
+--     where (r :. c) = liftIndex (P.min 10) $ size a
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
@@ -699,10 +711,14 @@ lmajority = fmap majo . sequenceA
 {-# INLINE lmajority #-}
 
 -- | Find the most common value in some `Foldable`.
-majo :: (Foldable t, Ord a) => t a -> a
+majo :: forall t a. (Foldable t, Ord a) => t a -> a
 majo = fst . g . f
-  where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = L.foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
+  where
+    f :: t a -> M.Map a Int
+    f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
+
+    g :: M.Map a Int -> (a, Int)
+    g = L.foldl1' (\(a,c) (k,v) -> if c < v then (k,v) else (a,c)) . M.toList
 {-# INLINE majo #-}
 
 -- | The least frequently appearing value at each shared index.
@@ -711,21 +727,35 @@ lminority = fmap mino . sequenceA
 {-# INLINE lminority #-}
 
 -- | Find the least common value in some `Foldable`.
-mino :: (Foldable t, Ord a) => t a -> a
+mino :: forall t a. (Foldable t, Ord a) => t a -> a
 mino = fst . g . f
-  where f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
-        g = L.foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
+  where
+    f :: t a -> M.Map a Int
+    f = foldl' (\m a -> M.insertWith (+) a 1 m) M.empty
+
+    g :: M.Map a Int -> (a, Int)
+    g = L.foldl1' (\(a,c) (k,v) -> if c > v then (k,v) else (a,c)) . M.toList
 {-# INLINE mino #-}
 
--- | A measure of how spread out a dataset is. This calculation will fail
--- with `Nothing` if a length 1 list is given.
-lvariance :: (Real a, KnownNat r, KnownNat c) => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c Double)
+-- | A measure of how spread out a dataset is. This calculation will fail with
+-- `Nothing` if a length 1 list is given.
+lvariance
+  :: forall p a r c. (Real a, KnownNat r, KnownNat c)
+  => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c Double)
 lvariance (_ :| []) = Nothing
 lvariance rs = Just (f <$> sequenceA rs)
-  where len = realToFrac $ length rs
-        avg ns = (\z -> realToFrac z / len) $ foldl' (+) 0 ns
-        f os@(n :| ns) = foldl' (\acc m -> acc + ((realToFrac m - av) ^ 2)) ((realToFrac n - av) ^ 2) ns / (len - 1)
-          where av = avg os
+  where
+    len :: Double
+    len = realToFrac $ length rs
+
+    avg :: NonEmpty a -> Double
+    avg ns = (\z -> realToFrac z / len) $ foldl' (+) 0 ns
+
+    f :: NonEmpty a -> Double
+    f os@(n :| ns) = num / (len - 1)
+      where
+        num = foldl' (\acc m -> acc + ((realToFrac m - av) ^ (2 :: Int))) ((realToFrac n - av) ^ (2 :: Int)) ns
+        av = avg os
 {-# INLINE lvariance #-}
 
 -- Old implementation that was replaced with `sequenceA` usage above. I wonder if this is faster?
@@ -744,13 +774,13 @@ zipWith f (Raster a) (Raster b) = Raster $ A.zipWith f a b
 
 -- | Focal Addition.
 fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fsum (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill 0)) a
+fsum (Raster a) = Raster $ mapStencil (Fill 0) (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = nw + no + ne + we + fo + ea + sw + so + se
 {-# INLINE fsum #-}
 
 -- | Focal Product.
 fproduct :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fproduct (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill 1)) a
+fproduct (Raster a) = Raster $ mapStencil (Fill 1) (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = nw * no * ne * we * fo * ea * sw * so * se
 
 -- | Focal Monoid - combine all elements of a neighbourhood via their `Monoid` instance.
@@ -759,7 +789,7 @@ fproduct (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill 1)) a
 --
 -- This is not mentioned in GaCM, but seems useful nonetheless.
 fmonoid :: (Monoid a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmonoid (Raster a) = Raster $ mapStencil (neighbourhoodStencil f (Fill mempty)) a
+fmonoid (Raster a) = Raster $ mapStencil (Fill mempty) (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = fo `mappend` nw `mappend` no `mappend` ne `mappend` we `mappend` ea `mappend` sw `mappend` so `mappend` se
 
 -- | Focal Mean.
@@ -769,38 +799,38 @@ fmean = fmap (\n -> realToFrac n / 9) . fsum
 
 -- | Focal Maximum.
 fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmax (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+fmax (Raster a) = Raster $ mapStencil Edge (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = P.max nw . P.max no . P.max ne . P.max we . P.max fo . P.max ea . P.max sw $ P.max so se
 {-# INLINE fmax #-}
 
 -- | Focal Minimum.
 fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmin (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+fmin (Raster a) = Raster $ mapStencil Edge (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = P.min nw . P.min no . P.min ne . P.min we . P.min fo . P.min ea . P.min sw $ P.min so se
 {-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
 fvariety :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Word
-fvariety (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Edge) a
+fvariety (Raster a) = Raster $ mapStencil Edge (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = fromIntegral . length $ L.nub [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fvariety #-}
 
 -- | Focal Majority - the most frequently appearing value in each neighbourhood.
 fmajority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmajority (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+fmajority (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = majo [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fmajority #-}
 
 -- | Focal Minority - the least frequently appearing value in each neighbourhood.
 fminority :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fminority (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+fminority (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = mino [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fminority #-}
 
 -- | Focal Percentage - the percentage of neighbourhood values that are equal
 -- to the neighbourhood focus. Not to be confused with `fpercentile`.
 fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
-fpercentage (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+fpercentage (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = ( bool 0 1 (nw == fo)
                                        + bool 0 1 (no == fo)
                                        + bool 0 1 (ne == fo)
@@ -814,7 +844,7 @@ fpercentage (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
 -- | Focal Percentile - the percentage of neighbourhood values that are /less/
 -- than the neighbourhood focus. Not to be confused with `fpercentage`.
 fpercentile :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
-fpercentile (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
+fpercentile (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = ( bool 0 1 (nw < fo)
                                        + bool 0 1 (no < fo)
                                        + bool 0 1 (ne < fo)
@@ -832,7 +862,7 @@ fpercentile (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Continue) a
 -- to its neighbours. Foci of equal value to none of their neighbours will have
 -- a value of 0.
 flinkage :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Line
-flinkage (Raster a) = Raster $ mapStencil (neighbourhoodStencil linkage (Fill def)) a
+flinkage (Raster a) = Raster $ mapStencil (Fill def) (neighbourhoodStencil linkage) a
 {-# INLINE flinkage #-}
 
 -- | A description of lineal directions with the same encoding as `Drain`.
@@ -960,11 +990,11 @@ frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
 -- | Focal Partition - the areal form of each location, only considering
 -- the top-right edge.
 fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
-fpartition (Raster a) = Raster $ mapStencil partStencil a
+fpartition (Raster a) = Raster $ mapStencil Reflect partStencil a
 {-# INLINE fpartition #-}
 
 partStencil :: (Eq a, Default a) => Stencil Ix2 a Corners
-partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
+partStencil = makeStencil (2 :. 2) (1 :. 0) $ \f -> do
   tl <- f (-1 :. 0)
   tr <- f (-1 :. 1)
   br <- f (0  :. 1)
@@ -978,7 +1008,7 @@ partStencil = makeStencil Reflect (2 :. 2) (1 :. 0) $ \f -> do
 -- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
 -- not `fpartition`.
 fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
-fshape (Raster a) = Raster $ mapStencil (neighbourhoodStencil f Reflect) a
+fshape (Raster a) = Raster $ mapStencil Reflect (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = Corners (surround fo no nw we)
                                        (surround fo so sw we)
                                        (surround fo so se ea)
@@ -998,7 +1028,7 @@ area :: Corners -> Double
 area (Corners tl bl br tr) = 1 - f tl - f bl - f br - f tr
   where f Complete = 1/8
         f OutFlow  = -1/8  -- For areas that "invade" their neighbours.
-        f _ = 0
+        f _        = 0
 {-# INLINE area #-}
 
 -- | Focal Area - the area of the shape made up by a neighbourhood focus and its
@@ -1012,7 +1042,7 @@ farea = fmap area
 -- | Focal Volume - the surficial volume under each pixel, assuming the `Raster`
 -- represents elevation in some way.
 fvolume :: (Fractional a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fvolume (Raster a) = Raster $ mapStencil (neighbourhoodStencil volume Reflect) a
+fvolume (Raster a) = Raster $ mapStencil Reflect (neighbourhoodStencil volume) a
 {-# INLINE fvolume #-}
 
 volume :: Fractional a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a
@@ -1043,13 +1073,13 @@ neighbourhood g f = g <$> f (-1 :. -1) <*> f (-1 :. 0) <*> f (-1 :. 1)
                     <*> f (1  :. -1) <*> f (1  :. 0) <*> f (1  :. 1)
 {-# INLINE neighbourhood #-}
 
-neighbourhoodStencil :: Default a => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Border a -> Stencil Ix2 a b
-neighbourhoodStencil f b = makeStencil b (3 :. 3) (1 :. 1) (neighbourhood f)
+neighbourhoodStencil :: Default a => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
+neighbourhoodStencil f = makeStencil (3 :. 3) (1 :. 1) (neighbourhood f)
 {-# INLINE neighbourhoodStencil #-}
 
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
-facetStencil f = makeStencil Reflect (3 :. 3) (1 :. 1) (neighbourhood g)
+facetStencil f = makeStencil (3 :. 3) (1 :. 1) (neighbourhood g)
   where g nw no ne we fo ea sw so se = f ((nw + no + we + fo) / 4)
                                          ((no + fo) / 2)
                                          ((no + ne + fo + ea) / 4)
@@ -1081,7 +1111,7 @@ leftPseudo = LA.inv (aT <> a) <> aT
 -- the horizonal cartographic plane. Results are in radians, with a flat plane
 -- having a slope angle of 0 and a near-vertical plane approaching \(\tau / 4\).
 fgradient :: (Manifest u Ix2 Double) => Raster u p r c Double -> Raster DW p r c Double
-fgradient (Raster a) = Raster $ mapStencil (facetStencil gradient) a
+fgradient (Raster a) = Raster $ mapStencil Reflect (facetStencil gradient) a
 {-# INLINE fgradient #-}
 
 -- | \(\tau\). One full rotation of the unit circle.
@@ -1115,7 +1145,7 @@ zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 -- \(\tau / 4\) being East, and so on. For areas that are essentially flat, their
 -- aspect will be `Nothing`.
 faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
-faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
+faspect (Raster a) = Raster $ mapStencil Reflect (facetStencil f) a
   where f nw no ne we fo ea sw so se = case normal' [ nw, no, ne, we, fo, ea, sw, so, se ] of
                  n | ((n LA.! 0) =~ 0) && ((n LA.! 1) =~ 0) -> Nothing
                    | otherwise -> Just $ angle (LA.normalize $ zcoord 0 n) axis
@@ -1124,7 +1154,7 @@ faspect (Raster a) = Raster $ mapStencil (facetStencil f) a
 
 -- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
 faspect' :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
-faspect' (Raster a) = Raster $ mapStencil (facetStencil f) a
+faspect' (Raster a) = Raster $ mapStencil Reflect (facetStencil f) a
   where f nw no ne we fo ea sw so se = angle (LA.normalize $ zcoord 0 $ normal' [ nw, no, ne, we, fo, ea, sw, so , se ]) axis
         axis = LA.vector [1, 0, 0]
 {-# INLINE faspect' #-}
@@ -1200,7 +1230,7 @@ instance NFData Drain where
 -- so our resulting `Drain` would only contain the directions
 -- of the diagonals.
 fdownstream :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Drain
-fdownstream (Raster a) = Raster $ mapStencil (facetStencil downstream) a
+fdownstream (Raster a) = Raster $ mapStencil Reflect (facetStencil downstream) a
 {-# INLINE fdownstream #-}
 
 downstream :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Drain
@@ -1221,7 +1251,7 @@ downstream nw no ne we fo ea sw so se = Drain . snd $ foldl' f (0, 0) angles
 -- directions from which liquid would flow into each surface location.
 -- See also `fdownstream`.
 fupstream :: Manifest u Ix2 Drain => Raster u p r c Drain -> Raster DW p r c Drain
-fupstream (Raster a) = Raster $ mapStencil (neighbourhoodStencil f $ Fill (Drain 0)) a
+fupstream (Raster a) = Raster $ mapStencil (Fill $ Drain 0) (neighbourhoodStencil f) a
   where f nw no ne we _ ea sw so se = Drain $ bool 0 1 (testBit (_drain nw) 7)
                                       + bool 0 2   (testBit (_drain no) 6)
                                       + bool 0 4   (testBit (_drain ne) 5)
