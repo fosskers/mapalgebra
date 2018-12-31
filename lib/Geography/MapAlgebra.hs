@@ -112,8 +112,8 @@ module Geography.MapAlgebra
   -- @
   --
   -- If you aren't interested in colour but still want to render your `Raster`,
-  -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and then
-  -- output with functions like `writeImage`.
+  -- consider `grayscale`. Coloured `Raster`s can be unwrapped with `_array` and
+  -- then output with functions like `writeImage`.
   , grayscale
   , Histogram(..), histogram, breaks
   , invisible
@@ -165,8 +165,8 @@ module Geography.MapAlgebra
   , zipWith
   -- *** Unary
   -- | If you want to do simple unary @Raster -> Raster@ operations (called
-  -- /LocalCalculation/ in GaCM), `Raster` is a `Functor` so you can use
-  -- `fmap` as normal:
+  -- /LocalCalculation/ in GaCM), `Raster` is a `Functor` so you can use `fmap`
+  -- as normal:
   --
   -- @
   -- myRaster :: Raster D p r c Int
@@ -180,8 +180,8 @@ module Geography.MapAlgebra
   -- `Raster`s. You would likely want @foldl1'@ which is provided by both List
   -- and Vector.
   --
-  -- Keep in mind that `Raster` `D` has a `Num` instance, so you can use
-  -- all the normal math operators with them as well.
+  -- Keep in mind that `Raster` `D` has a `Num` instance, so you can use all the
+  -- normal math operators with them as well.
   , lmax, lmin
   -- *** Other
   -- | There is no binary form of these functions that exists without
@@ -192,11 +192,11 @@ module Geography.MapAlgebra
   -- \]
   , lmean, lvariety, lmajority, lminority, lvariance
   -- ** Focal Operations
-  -- | Operations on one `Raster`, given some polygonal neighbourhood.
-  -- Your `Raster` must be of a `Manifest` type (i.e. backed by real memory) before
+  -- | Operations on one `Raster`, given some polygonal neighbourhood. Your
+  -- `Raster` must be of a `Manifest` type (i.e. backed by real memory) before
   -- you attempt any focal operations. Without this constraint, wayward users
-  -- run the risk of setting up operations that would perform terribly.
-  -- Use `strict` to easily convert a lazy `Raster` to a memory-backed one.
+  -- run the risk of setting up operations that would perform terribly. Use
+  -- `strict` to easily convert a lazy `Raster` to a memory-backed one.
   --
   -- @
   -- myRaster :: Raster D p r c Float
@@ -209,15 +209,15 @@ module Geography.MapAlgebra
   , fmajority, fminority, fvariety
   , fpercentage, fpercentile
   -- *** Lineal
-  -- | Focal operations that assume that groups of data points represent line-like objects
-  -- in a `Raster`. GaCM calls these /lineal characteristics/ and describes them fully
-  -- on page 18 and 19.
+  -- | Focal operations that assume that groups of data points represent
+  -- line-like objects in a `Raster`. GaCM calls these /lineal characteristics/
+  -- and describes them fully on page 18 and 19.
   , Line(..)
   , flinkage, flength
   -- *** Areal
-  -- | Focal operations that assume that groups of data points represent 2D areas
-  -- in a `Raster`. GaCM calls these /areal characteristics/ and describes them fully
-  -- on page 20 and 21.
+  -- | Focal operations that assume that groups of data points represent 2D
+  -- areas in a `Raster`. GaCM calls these /areal characteristics/ and describes
+  -- them fully on page 20 and 21.
   , Corners(..), Surround(..)
   , fpartition, fshape, ffrontage, farea
   -- *** Surficial
@@ -226,9 +226,9 @@ module Geography.MapAlgebra
   -- and 22.
   --
   -- Some of these operations require finding a "best-fit plane" that
-  -- approximates the surficial shape of each pixel. Each pixel has 9 "facet points"
-  -- calculated for it based on its surrounding pixels. We then use these facets to determine
-  -- a plane which adheres to this equation:
+  -- approximates the surficial shape of each pixel. Each pixel has 9 "facet
+  -- points" calculated for it based on its surrounding pixels. We then use
+  -- these facets to determine a plane which adheres to this equation:
   --
   -- \[
   -- ax + by + c = z
@@ -263,9 +263,9 @@ module Geography.MapAlgebra
   --        c
   --    \end{bmatrix} = \boxed{(A^{T}A)^{-1}A^{T}}B
   -- \]
-  -- The boxed section is called the "left pseudo inverse" and is available as `leftPseudo`.
-  -- The actual values of \(A\) don't matter for our purposes, hence \(A\) can be fixed to
-  -- avoid redundant calculations.
+  -- The boxed section is called the "left pseudo inverse" and is available as
+  -- `leftPseudo`. The actual values of \(A\) don't matter for our purposes,
+  -- hence \(A\) can be fixed to avoid redundant calculations.
   , Drain(..), Direction(..)
   , direction, directions, drainage
   , fvolume, fgradient, faspect, faspect', fdownstream, fupstream
@@ -315,12 +315,12 @@ import           Text.Printf (printf)
 -- | A location on the Earth in some `Projection`.
 data Point p = Point { x :: !Double, y :: !Double } deriving (Eq, Show)
 
--- | The Earth is not a sphere. Various schemes have been invented
--- throughout history that provide `Point` coordinates for locations on the
--- earth, although all are approximations and come with trade-offs. We call
--- these "Projections", since they are a mapping of `Sphere` coordinates to
--- some other approximation. The Projection used most commonly for mapping on
--- the internet is called `WebMercator`.
+-- | The Earth is not a sphere. Various schemes have been invented throughout
+-- history that provide `Point` coordinates for locations on the earth, although
+-- all are approximations and come with trade-offs. We call these "Projections",
+-- since they are a mapping of `Sphere` coordinates to some other approximation.
+-- The Projection used most commonly for mapping on the internet is called
+-- `WebMercator`.
 --
 -- A Projection is also known as a Coordinate Reference System (CRS).
 --
@@ -339,9 +339,8 @@ reproject :: (Projection p, Projection r) => Point p -> Point r
 reproject = fromSphere . toSphere
 {-# INLINE reproject #-}
 
--- | A perfect geometric sphere. The earth isn't actually shaped this way,
--- but it's a convenient middle-ground for converting between various
--- `Projection`s.
+-- | A perfect geometric sphere. The earth isn't actually shaped this way, but
+-- it's a convenient middle-ground for converting between various `Projection`s.
 data Sphere
 
 instance Projection Sphere where
@@ -370,10 +369,9 @@ data WebMercator
 -- * @c@: How many columns does this Raster have?
 -- * @a@: What data type is held in this Raster?
 --
--- By having explicit p, r, and c, we make impossible any operation between
--- two Rasters of differing size or projection. Conceptually, we consider
--- Rasters of different size and projection to be /entirely different types/.
--- Example:
+-- By having explicit p, r, and c, we make impossible any operation between two
+-- Rasters of differing size or projection. Conceptually, we consider Rasters of
+-- different size and projection to be /entirely different types/. Example:
 --
 -- @
 -- -- | A lazy 256x256 Raster with the value 5 at every index. Uses DataKinds
@@ -496,13 +494,13 @@ lazy :: Source u Ix2 a => Raster u p r c a -> Raster D p r c a
 lazy (Raster a) = Raster $ delay a
 {-# INLINE lazy #-}
 
--- | Evaluate some lazy (`D`, `DW`, or `DI`) `Raster` to some explicit `Manifest` type
--- (i.e. to a real memory-backed Array). Will follow the `Comp`utation strategy
--- of the underlying 'massiv' `Array`.
+-- | Evaluate some lazy (`D`, `DW`, or `DI`) `Raster` to some explicit
+-- `Manifest` type (i.e. to a real memory-backed Array). Will follow the
+-- `Comp`utation strategy of the underlying 'massiv' `Array`.
 --
--- __Note:__ If using the `Par` computation strategy, make sure you're compiling with
--- @-with-rtsopts=-N@ to automatically use all available CPU cores at runtime. Otherwise
--- your "parallel" operations will only execute on one core.
+-- __Note:__ If using the `Par` computation strategy, make sure you're compiling
+-- with @-with-rtsopts=-N@ to automatically use all available CPU cores at
+-- runtime. Otherwise your "parallel" operations will only execute on one core.
 strict :: (Load v Ix2 a, Mutable u Ix2 a) => u -> Raster v p r c a -> Raster u p r c a
 strict u (Raster a) = Raster $ computeAs u a
 {-# INLINE strict #-}
@@ -512,15 +510,17 @@ constant :: (KnownNat r, KnownNat c, Construct u Ix2 a) => u -> Comp -> a -> Ras
 constant u c a = fromFunction u c (const a)
 {-# INLINE constant #-}
 
--- | \(\mathcal{O}(1)\). Create a `Raster` from a function of its row and column number respectively.
+-- | \(\mathcal{O}(1)\). Create a `Raster` from a function of its row and column
+-- number respectively.
 fromFunction :: forall u p r c a. (KnownNat r, KnownNat c, Construct u Ix2 a) =>
   u -> Comp -> (Ix2 -> a) -> Raster u p r c a
 fromFunction u c f = Raster $ makeArrayR u c sh f
   where sh = fromInteger (natVal (Proxy :: Proxy r)) :. fromInteger (natVal (Proxy :: Proxy c))
 {-# INLINE fromFunction #-}
 
--- | \(\mathcal{O}(1)\). Create a `Raster` from the values of any `GV.Vector` type.
--- Will fail if the size of the Vector does not match the declared size of the `Raster`.
+-- | \(\mathcal{O}(1)\). Create a `Raster` from the values of any `GV.Vector`
+-- type. Will fail if the size of the Vector does not match the declared size of
+-- the `Raster`.
 fromVector :: forall v p r c a. (KnownNat r, KnownNat c, GV.Vector v a, Mutable (A.ARepr v) Ix2 a, Typeable v) =>
   Comp -> v a -> Either String (Raster (A.ARepr v) p r c a)
 fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp (r :. c) v
@@ -535,13 +535,12 @@ data RGBARaster p r c a = RGBARaster { _red   :: !(Raster S p r c a)
                                      , _blue  :: !(Raster S p r c a)
                                      , _alpha :: !(Raster S p r c a) }
 
--- | Read any image type into a `Raster` of distinct colour bands
--- with the cell type you declare. If the source image stores its
--- values as `Int` but you declare `Double`, the conversion will happen
--- automatically.
+-- | Read any image type into a `Raster` of distinct colour bands with the cell
+-- type you declare. If the source image stores its values as `Int` but you
+-- declare `Double`, the conversion will happen automatically.
 --
--- Will fail if the declared size of the `Raster`
--- does not match the actual size of the input image.
+-- Will fail if the declared size of the `Raster` does not match the actual size
+-- of the input image.
 fromRGBA :: forall p r c a. (Elevator a, KnownNat r, KnownNat c) => FilePath -> IO (Either String (RGBARaster p r c a))
 fromRGBA fp = do
   cap <- getNumCapabilities
@@ -661,20 +660,20 @@ purpleRed = ramp colours
   where colours = [ (51, 60, 255), (76, 60, 233), (99, 60, 211), (121, 60, 188), (155, 60, 155)
                   , (166, 60, 143), (188, 60, 121), (206, 60, 94), (217, 60, 83), (255, 60, 76) ]
 
--- | Convert a `Raster` into grayscale pixels, suitable for easy output with functions
--- like `writeImage`.
+-- | Convert a `Raster` into grayscale pixels, suitable for easy output with
+-- functions like `writeImage`.
 grayscale :: Functor (Raster u p r c) => Raster u p r c a -> Raster u p r c (Pixel Y a)
 grayscale = fmap PixelY
 {-# INLINE grayscale #-}
 
--- | Render a PNG-encoded `BL.ByteString` from a coloured `Raster`.
--- Useful for returning a `Raster` from a webserver endpoint.
+-- | Render a PNG-encoded `BL.ByteString` from a coloured `Raster`. Useful for
+-- returning a `Raster` from a webserver endpoint.
 png :: (Source u Ix2 (Pixel cs a), ColorSpace cs a) => Raster u p r c (Pixel cs a) -> BL.ByteString
 png (Raster a) = encode PNG def a
 {-# INLINE png #-}
 
--- | Called /LocalClassification/ in GaCM. The first argument is the value
--- to give to any index whose value is less than the lowest break in the `M.Map`.
+-- | Called /LocalClassification/ in GaCM. The first argument is the value to
+-- give to any index whose value is less than the lowest break in the `M.Map`.
 --
 -- This is a glorified `fmap` operation, but we expose it for convenience.
 classify :: (Ord a, Functor f) => b -> M.Map a b -> f a -> f b
@@ -783,9 +782,9 @@ fproduct :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster D
 fproduct (Raster a) = Raster $ mapStencil (Fill 1) (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = nw * no * ne * we * fo * ea * sw * so * se
 
--- | Focal Monoid - combine all elements of a neighbourhood via their `Monoid` instance.
--- In terms of precedence, the neighbourhood focus is the "left-most", and all other
--- elements are "added" to it.
+-- | Focal Monoid - combine all elements of a neighbourhood via their `Monoid`
+-- instance. In terms of precedence, the neighbourhood focus is the "left-most",
+-- and all other elements are "added" to it.
 --
 -- This is not mentioned in GaCM, but seems useful nonetheless.
 fmonoid :: (Monoid a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
@@ -827,8 +826,8 @@ fminority (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = mino [ nw, no, ne, we, fo, ea, sw, so, se ]
 {-# INLINE fminority #-}
 
--- | Focal Percentage - the percentage of neighbourhood values that are equal
--- to the neighbourhood focus. Not to be confused with `fpercentile`.
+-- | Focal Percentage - the percentage of neighbourhood values that are equal to
+-- the neighbourhood focus. Not to be confused with `fpercentile`.
 fpercentage :: (Eq a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Double
 fpercentage (Raster a) = Raster $ mapStencil Continue (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = ( bool 0 1 (nw == fo)
@@ -887,8 +886,8 @@ linkage nw no ne we fo ea sw so se = Line $ axes + diags
 data Direction = East | NorthEast | North | NorthWest | West | SouthWest | South | SouthEast
   deriving (Eq, Ord, Enum, Show)
 
--- | Focal Length - the length of the lineal structure at every location. The result is in
--- "pixel units", where 1 is the height/width of one pixel.
+-- | Focal Length - the length of the lineal structure at every location. The
+-- result is in "pixel units", where 1 is the height/width of one pixel.
 flength :: Functor (Raster u p r c) => Raster u p r c Line -> Raster u p r c Double
 flength = fmap f
   where half = 1 / 2
@@ -903,9 +902,9 @@ flength = fmap f
                      + bool 0 root (testBit a 7)
 {-# INLINE flength #-}
 
--- | A layout of the areal conditions of a single `Raster` pixel.
--- It describes whether each pixel corner is occupied by the same
--- "areal zone" as the pixel centre.
+-- | A layout of the areal conditions of a single `Raster` pixel. It describes
+-- whether each pixel corner is occupied by the same "areal zone" as the pixel
+-- centre.
 data Corners = Corners { _topLeft     :: !Surround
                        , _bottomLeft  :: !Surround
                        , _bottomRight :: !Surround
@@ -914,9 +913,9 @@ data Corners = Corners { _topLeft     :: !Surround
 instance NFData Corners where
   rnf (Corners tl bl br tr) = tl `deepseq` bl `deepseq` br `deepseq` tr `deepseq` ()
 
--- | A state of surroundedness of a pixel corner.
--- For the examples below, the bottom-left pixel is considered the focus and
--- we're wondering about the surroundedness of its top-right corner.
+-- | A state of surroundedness of a pixel corner. For the examples below, the
+-- bottom-left pixel is considered the focus and we're wondering about the
+-- surroundedness of its top-right corner.
 data Surround = Complete      -- ^ A corner has three of the same opponent against it.
                               --
                               -- The corner is considered "occupied" by the opponent value,
@@ -964,8 +963,8 @@ instance NFData Surround where
     RightAngle -> ()
     OutFlow    -> ()
 
--- | Imagining a 2x2 neighbourhood with its focus in the bottom-left,
--- what `Surround` relationship does the focus have with the other pixels?
+-- | Imagining a 2x2 neighbourhood with its focus in the bottom-left, what
+-- `Surround` relationship does the focus have with the other pixels?
 surround :: Eq a => a -> a -> a -> a -> Surround
 surround fo tl tr br
   | up && tl == tr && tr == br = Complete
@@ -978,7 +977,8 @@ surround fo tl tr br
         right = fo /= br
 {-# INLINE surround #-}
 
--- | What is the total length of the areal edges (if there are any) at a given pixel?
+-- | What is the total length of the areal edges (if there are any) at a given
+-- pixel?
 frontage :: Corners -> Double
 frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
   where f Complete   = 1 / sqrt 2
@@ -987,8 +987,8 @@ frontage (Corners tl bl br tr) = f tl + f bl + f br + f tr
         f RightAngle = 1
         f OutFlow    = 1 / sqrt 2
 
--- | Focal Partition - the areal form of each location, only considering
--- the top-right edge.
+-- | Focal Partition - the areal form of each location, only considering the
+-- top-right edge.
 fpartition :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
 fpartition (Raster a) = Raster $ mapStencil Reflect partStencil a
 {-# INLINE fpartition #-}
@@ -1002,11 +1002,11 @@ partStencil = makeStencil (2 :. 2) (1 :. 0) $ \f -> do
   pure $ Corners (surround fo tl tl fo) Open (surround fo fo br br) (surround fo tl tr br)
 {-# INLINE partStencil #-}
 
--- | Like `fpartition`, but considers the `Surround` of all corners. Is alluded to
--- in GaCM but isn't given its own operation name.
+-- | Like `fpartition`, but considers the `Surround` of all corners. Is alluded
+-- to in GaCM but isn't given its own operation name.
 --
--- If preparing for `ffrontage` or `farea`, you almost certainly want this function and
--- not `fpartition`.
+-- If preparing for `ffrontage` or `farea`, you almost certainly want this
+-- function and not `fpartition`.
 fshape :: (Default a, Eq a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c Corners
 fshape (Raster a) = Raster $ mapStencil Reflect (neighbourhoodStencil f) a
   where f nw no ne we fo ea sw so se = Corners (surround fo no nw we)
@@ -1015,7 +1015,8 @@ fshape (Raster a) = Raster $ mapStencil Reflect (neighbourhoodStencil f) a
                                        (surround fo no ne ea)
 {-# INLINE fshape #-}
 
--- | Focal Frontage - the length of areal edges between each pixel and its neighbourhood.
+-- | Focal Frontage - the length of areal edges between each pixel and its
+-- neighbourhood.
 --
 -- Usually, the output of `fshape` is the appropriate input for this function.
 ffrontage :: Functor (Raster u p r c) => Raster u p r c Corners -> Raster u p r c Double
@@ -1118,16 +1119,16 @@ fgradient (Raster a) = Raster $ mapStencil Reflect (facetStencil gradient) a
 tau :: Double
 tau = 6.283185307179586
 
--- | Given a list of \(z\) values, find the slope of the best-fit
--- plane that matches those points.
+-- | Given a list of \(z\) values, find the slope of the best-fit plane that
+-- matches those points.
 --
 -- See: https://stackoverflow.com/a/16669463/643684
 gradient :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double
 gradient nw no ne we fo ea sw so se = (tau / 2) - acos (normal vs LA.! 2)
   where vs = [ nw, no, ne, we, fo, ea, sw, so, se ]
 
--- | Given a list of \(z\) values, find a normal vector that /points down/
--- from a best-fit plane toward the cartographic plane.
+-- | Given a list of \(z\) values, find a normal vector that /points down/ from
+-- a best-fit plane toward the cartographic plane.
 normal :: [Double] -> LA.Vector Double
 normal = LA.normalize . zcoord (-1) . normal'
 
@@ -1140,10 +1141,10 @@ normal' vs = leftPseudo LA.#> LA.vector vs
 zcoord :: Double -> LA.Vector Double -> LA.Vector Double
 zcoord n v = LA.vector [ v LA.! 0, v LA.! 1, n ]
 
--- | Focal Aspect - the compass direction toward which the surface
--- descends most rapidly. Results are in radians, with 0 or \(\tau\) being North,
--- \(\tau / 4\) being East, and so on. For areas that are essentially flat, their
--- aspect will be `Nothing`.
+-- | Focal Aspect - the compass direction toward which the surface descends most
+-- rapidly. Results are in radians, with 0 or \(\tau\) being North, \(\tau / 4\)
+-- being East, and so on. For areas that are essentially flat, their aspect will
+-- be `Nothing`.
 faspect :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c (Maybe Double)
 faspect (Raster a) = Raster $ mapStencil Reflect (facetStencil f) a
   where f nw no ne we fo ea sw so se = case normal' [ nw, no, ne, we, fo, ea, sw, so, se ] of
@@ -1152,15 +1153,16 @@ faspect (Raster a) = Raster $ mapStencil Reflect (facetStencil f) a
         axis = LA.vector [1, 0, 0]
 {-# INLINE faspect #-}
 
--- | Like `faspect`, but slightly faster. Beware of nonsense results when the plane is flat.
+-- | Like `faspect`, but slightly faster. Beware of nonsense results when the
+-- plane is flat.
 faspect' :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Double
 faspect' (Raster a) = Raster $ mapStencil Reflect (facetStencil f) a
   where f nw no ne we fo ea sw so se = angle (LA.normalize $ zcoord 0 $ normal' [ nw, no, ne, we, fo, ea, sw, so , se ]) axis
         axis = LA.vector [1, 0, 0]
 {-# INLINE faspect' #-}
 
--- | Approximate Equality. Considers two `Double` to be equal if they are
--- less than \(/tau / 1024\) apart.
+-- | Approximate Equality. Considers two `Double` to be equal if they are less
+-- than \(/tau / 1024\) apart.
 (=~) :: Double -> Double -> Bool
 a =~ b = abs (a - b) < 0.0061359
 
@@ -1168,17 +1170,17 @@ a =~ b = abs (a - b) < 0.0061359
 angle :: LA.Vector Double -> LA.Vector Double -> Double
 angle u v = acos $ LA.dot u v
 
--- | The main type for `fdownstream` and `fupstream`, used to calculate
--- Focal Drainage. This scheme for encoding drainage patterns is described
--- on page 81 of GaCM.
+-- | The main type for `fdownstream` and `fupstream`, used to calculate Focal
+-- Drainage. This scheme for encoding drainage patterns is described on page 81
+-- of GaCM.
 --
 -- ==== __Full Explanation__
 --
 -- Fluid can flow in or out of a square pixel in one of 256 ways. Imagine a pit,
 -- whose neighbours are all higher in elevation: liquid would flow in from all
--- eight compass directions, but no liquid would flow out. Consider then
--- a neighbourhood of random heights - fluid might flow in or out of the focus
--- in any permutation of the eight directions.
+-- eight compass directions, but no liquid would flow out. Consider then a
+-- neighbourhood of random heights - fluid might flow in or out of the focus in
+-- any permutation of the eight directions.
 --
 -- The scheme for encoding these permutations in a single `Word8` as described
 -- in GaCM is this:
@@ -1191,12 +1193,13 @@ angle u v = acos $ LA.dot u v
 -- [ 32  64  128 ]
 -- @
 --
--- Direction values are summed to make the encoding.
--- If there were drainage to the North, East, and SouthEast, we'd see a sum
--- of \(2 + 16 + 128 = 146\) to uniquely represent this.
+-- Direction values are summed to make the encoding. If there were drainage to
+-- the North, East, and SouthEast, we'd see a sum of \(2 + 16 + 128 = 146\) to
+-- uniquely represent this.
 --
--- Analysing a drainage pattern from a `Drain` is just as easy: check if the bit corresponding
--- to the desired direction is flipped. The `direction` function handles this.
+-- Analysing a drainage pattern from a `Drain` is just as easy: check if the bit
+-- corresponding to the desired direction is flipped. The `direction` function
+-- handles this.
 newtype Drain = Drain { _drain :: Word8 }
   deriving stock   (Eq, Ord, Show)
   deriving newtype (Storable, Prim, Default)
@@ -1208,8 +1211,8 @@ instance NFData Drain where
 -- directions of steepest descent from each location. Appropriate as the input
 -- to `fupstream`.
 --
--- __Note:__ Peak-like surfaces will not flow equally in all 8 directions. Consider this
--- neighbourhood:
+-- __Note:__ Peak-like surfaces will not flow equally in all 8 directions.
+-- Consider this neighbourhood:
 --
 -- @
 -- [ 1 1 1 ]
@@ -1217,8 +1220,9 @@ instance NFData Drain where
 -- [ 1 1 1 ]
 -- @
 --
--- According to the rules in GaCM for calculating the intermediate surficial "facet"
--- points for the focus, 3, we arrive at the following facet height matrix:
+-- According to the rules in GaCM for calculating the intermediate surficial
+-- "facet" points for the focus, 3, we arrive at the following facet height
+-- matrix:
 --
 -- @
 -- [ 1.5 2 1.5 ]
@@ -1227,8 +1231,7 @@ instance NFData Drain where
 -- @
 --
 -- With these numbers it's clear that the corners would yield a steeper angle,
--- so our resulting `Drain` would only contain the directions
--- of the diagonals.
+-- so our resulting `Drain` would only contain the directions of the diagonals.
 fdownstream :: Manifest u Ix2 Double => Raster u p r c Double -> Raster DW p r c Drain
 fdownstream (Raster a) = Raster $ mapStencil Reflect (facetStencil downstream) a
 {-# INLINE fdownstream #-}
@@ -1248,8 +1251,8 @@ downstream nw no ne we fo ea sw so se = Drain . snd $ foldl' f (0, 0) angles
                  , (fo - se, 128) ]
 
 -- | Focal Drainage - upstream portion. This indicates the one of more compass
--- directions from which liquid would flow into each surface location.
--- See also `fdownstream`.
+-- directions from which liquid would flow into each surface location. See also
+-- `fdownstream`.
 fupstream :: Manifest u Ix2 Drain => Raster u p r c Drain -> Raster DW p r c Drain
 fupstream (Raster a) = Raster $ mapStencil (Fill $ Drain 0) (neighbourhoodStencil f) a
   where f nw no ne we _ ea sw so se = Drain $ bool 0 1 (testBit (_drain nw) 7)
