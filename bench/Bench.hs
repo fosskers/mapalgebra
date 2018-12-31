@@ -1,4 +1,5 @@
-{-# LANGUAGE DataKinds, TypeApplications #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main ( main ) where
 
@@ -8,8 +9,8 @@ import           Data.Massiv.Array as A hiding (zipWith)
 import           Data.Monoid ((<>))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
-import           GHC.TypeLits
 import           Geography.MapAlgebra
+import           GHC.TypeLits
 import           Graphics.ColorSpace
 import qualified Numeric.LinearAlgebra as LA
 import           Prelude hiding (zipWith)
@@ -172,11 +173,11 @@ compositeOps i@(RGBARaster r g _ _) =
   , bench "EVI + Colour" $ nf (_array . strict S . classify invisible cr . evi) i
   , bench "EVI + Colour + PNG (D)" $ nf (png . classify invisible cr . evi) i
   , bench "EVI + Colour + PNG (S)" $ nf (png . strict S . classify invisible cr . evi) i ]
-  where cr = greenRed $ fmap (10 ^) [1..10]
+  where cr = greenRed $ fmap (10 ^) ([1..10] :: [Int])
 
 fromRight :: Either a b -> b
 fromRight (Right b) = b
-fromRight _ = error "Was Left"
+fromRight _         = error "Was Left"
 
 constantB :: Int -> Raster S p 256 256 Int
 constantB = constant S Par
