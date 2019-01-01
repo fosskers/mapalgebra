@@ -36,10 +36,7 @@ ghc-options:
 
 dependencies:
   - base >= 4.10 && < 4.13
-  - bytestring
   - containers
-  - data-default
-  - deepseq
   - massiv >= 0.2 && < 0.3
   - massiv-io >= 0.1 && < 0.2
   - hmatrix >= 0.18 && < 0.20
@@ -48,6 +45,10 @@ dependencies:
 library:
   source-dirs: lib
   other-modules: []
+  dependencies:
+    - bytestring
+    - data-default
+    - deepseq
 
 tests:
   mapalgebra-test:
