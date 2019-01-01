@@ -15,7 +15,8 @@ addons:
 # The different configurations we want to test. You could also do things like
 # change flags or use --stack-yaml to point to a different file.
 env:
-- ARGS="--resolver lts-11.6"
+  - ARGS="--resolver lts-13.0"   # GHC 8.6.3
+  - ARGS="--resolver lts-12.26"  # GHC 8.4.4
 
 before_install:
 # Download and unpack the stack executable
