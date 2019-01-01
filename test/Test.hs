@@ -1,7 +1,8 @@
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE ImplicitParams      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications, ImplicitParams #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Main ( main ) where
 
@@ -11,8 +12,8 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array (getComp, index')
 import qualified Data.Set as S
 import qualified Data.Vector as V
-import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Storable as VS
+import qualified Data.Vector.Unboxed as U
 import           Data.Word
 import           Geography.MapAlgebra
 import qualified Numeric.LinearAlgebra as LA
@@ -110,7 +111,7 @@ suite r = testGroup "Unit Tests"
 
 fromRight :: Either a b -> b
 fromRight (Right b) = b
-fromRight _ = error "Was Left"
+fromRight _         = error "Was Left"
 
 one :: Raster P p 7 7 Word
 one = constant P Seq 1
@@ -252,12 +253,12 @@ fareaComplex = let ?epsilon = 0.001 in actual @?~ (7 / 8)
                                                                   ,1,0,1,1] :: [Int] )
 
 fvolumeFlat :: Assertion
-fvolumeFlat = (strict U $ fvolume expected) @?= expected
+fvolumeFlat = strict U (fvolume expected) @?= expected
   where expected :: Raster U p 3 3 Double
         expected = fromRight . fromVector Seq $ U.fromList [8,8,8,8,8,8,8,8,8]
 
 fvolumeHill :: Assertion
-fvolumeHill = (flip index' (1 :. 1) $ _array actual) @?= expected
+fvolumeHill = index' (_array actual) (1 :. 1) @?= expected
   where expected :: Double
         expected = P.sum [20,20,16,20,16,16,16,16,12,16,12,12] / 12
         actual :: Raster U p 3 3 Double
@@ -301,52 +302,52 @@ fgradientFlat = actual @?= expected
         actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fgradient45 :: Assertion
-fgradient45 = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 8)
+fgradient45 = let ?epsilon = 0.0001 in index' (_array actual) (1 :. 1) @?~ (tau / 8)
   where actual :: Raster U p 3 3 Double
         actual = strict U . fgradient . fromRight . fromVector Seq $ U.fromList ([3,3,3,2,2,2,1,1,1] :: [Double])
 
 faspectFlat :: Assertion
-faspectFlat = (flip index' (1 :. 1) $ _array actual) @?= Nothing
+faspectFlat = index' (_array actual) (1 :. 1) @?= Nothing
   where actual :: Raster B p 3 3 (Maybe Double)
         actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 faspect45 :: Assertion
-faspect45 = (flip index' (1 :. 1) $ _array actual) @?= Just (tau / 2)
+faspect45 = index' (_array actual) (1 :. 1) @?= Just (tau / 2)
   where actual :: Raster B p 3 3 (Maybe Double)
         actual = strict B . faspect . fromRight . fromVector Seq $ U.fromList ([3,3,3,2,2,2,1,1,1] :: [Double])
 
 faspectEast :: Assertion
-faspectEast = let ?epsilon = 0.0001 in (flip index' (1 :. 1) $ _array actual) @?~ (tau / 4)
+faspectEast = let ?epsilon = 0.0001 in index' (_array actual) (1 :. 1) @?~ (tau / 4)
   where actual :: Raster B p 3 3 Double
         actual = strict B . faspect' . fromRight . fromVector Seq $ U.fromList ([3,2,1,3,2,1,3,2,1] :: [Double])
 
 fdownstream4 :: Assertion
-fdownstream4 = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [North,South,East,West])
+fdownstream4 = index' (_array actual) (1 :. 1) @?= drainage (S.fromList [North,South,East,West])
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([3,1,3,1,2,1,3,1,3] :: [Double])
 
 fdownstreamFlat :: Assertion
-fdownstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [East ..])
+fdownstreamFlat = index' (_array actual) (1 :. 1) @?= drainage (S.fromList [East ..])
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fdownstreamPeak :: Assertion
-fdownstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [NorthEast, NorthWest, SouthWest, SouthEast])
+fdownstreamPeak = index' (_array actual) (1 :. 1) @?= drainage (S.fromList [NorthEast, NorthWest, SouthWest, SouthEast])
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
 
 fdownstreamPit :: Assertion
-fdownstreamPit = (flip index' (1 :. 1) $ _array actual) @?= Drain 0
+fdownstreamPit = index' (_array actual) (1 :. 1) @?= Drain 0
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([2,2,2,2,1,2,2,2,2] :: [Double])
 
 fupstreamFlat :: Assertion
-fupstreamFlat = (flip index' (1 :. 1) $ _array actual) @?= drainage (S.fromList [East ..])
+fupstreamFlat = index' (_array actual) (1 :. 1) @?= drainage (S.fromList [East ..])
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fupstream . strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,1,1,1,1,1] :: [Double])
 
 fupstreamPeak :: Assertion
-fupstreamPeak = (flip index' (1 :. 1) $ _array actual) @?= Drain 0
+fupstreamPeak = index' (_array actual) (1 :. 1) @?= Drain 0
   where actual :: Raster S p 3 3 Drain
         actual = strict S . fupstream . strict S . fdownstream . fromRight . fromVector Seq $ U.fromList ([1,1,1,1,3,1,1,1,1] :: [Double])
 

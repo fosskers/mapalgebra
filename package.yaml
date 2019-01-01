@@ -27,29 +27,28 @@ extra-source-files:
   - data/*
 
 ghc-options:
-  - -fwarn-unused-imports
-  - -fwarn-unused-binds
-  - -fwarn-name-shadowing
-  - -fwarn-unused-matches
-  - -fwarn-incomplete-patterns
+  - -Wall
+  - -Wincomplete-record-updates
   - -Wincomplete-uni-patterns
+  - -Wredundant-constraints
   # This introduces around a 2x speedup.
   # - -fllvm
 
 dependencies:
-  - base >= 4.10 && < 4.12
-  - bytestring
+  - base >= 4.10 && < 4.13
   - containers
-  - data-default
-  - deepseq
-  - massiv >= 0.1 && < 0.2
+  - massiv >= 0.2 && < 0.3
   - massiv-io >= 0.1 && < 0.2
-  - hmatrix >= 0.18 && < 0.19
+  - hmatrix >= 0.18 && < 0.20
   - vector >= 0.11 && < 0.13
 
 library:
   source-dirs: lib
   other-modules: []
+  dependencies:
+    - bytestring
+    - data-default
+    - deepseq
 
 tests:
   mapalgebra-test:
@@ -64,7 +63,7 @@ tests:
       - HUnit-approx >= 1.1 && < 1.2
       - tasty >= 0.11 && < 2.0
       - tasty-hunit >= 0.9 && < 0.11
-      - tasty-quickcheck >= 0.8 && < 0.10
+      - tasty-quickcheck >= 0.8 && < 0.11
       - QuickCheck
 
 benchmarks:
@@ -77,5 +76,5 @@ benchmarks:
       - -O2
       - -with-rtsopts=-N
     dependencies:
-      - criterion >= 1.1 && < 1.4
+      - criterion >= 1.1 && < 1.6
       - mapalgebra
