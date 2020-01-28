@@ -1,3 +1,8 @@
+## 0.1.3
+
+- `massiv-0.4` compatibility.
+- GHC 8.8 compatibility.
+
 ## 0.1.2
 
 - GHC 8.6 compatibility. Requires `massiv` of at least version `0.2`.
