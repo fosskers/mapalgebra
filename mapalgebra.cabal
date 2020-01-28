@@ -1,0 +1,80 @@
+cabal-version:      2.2
+name:               mapalgebra
+version:            0.2.0
+synopsis:           Efficient, polymorphic Map Algebra.
+description:
+  Efficient, polymorphic Map Algebra.
+  .
+  This library is an implementation of /Map Algebra/ as described in the book
+  /GIS and Cartographic Modeling/ by Dana Tomlin. The fundamental type, the
+  `Raster`, is typesafe. Rasters of different size and projection are considered
+  different types, and so cannot be combined mistakenly in any way.
+  .
+  Also featured are op fusion (i.e. "lazy Rasters"), extremely fast Focal
+  Operations, and typesafe NoData handling. Please see the main module for a
+  more detailed introduction.
+
+category:           Geography
+homepage:           https://github.com/fosskers/mapalgebra
+author:             Colin Woodbury
+maintainer:         colin@fosskers.ca
+copyright:          2018 - 2020 Colin Woodbury
+license:            BSD-3-Clause
+license-file:       LICENSE
+build-type:         Simple
+extra-source-files:
+  README.md
+  CHANGELOG.md
+  data/512x512.tif
+  data/gray.png
+  data/gray512.tif
+  data/spectrum.png
+
+common commons
+  default-language: Haskell2010
+  ghc-options:
+    -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
+    -Wredundant-constraints
+
+  build-depends:
+    , base     >=4.10 && <4.14
+    , hmatrix  >=0.18 && <0.21
+    , massiv   ^>=0.4
+    , vector   >=0.11 && <0.13
+
+library
+  import:          commons
+  hs-source-dirs:  lib
+  build-depends:
+    , bytestring
+    , containers
+    , deepseq
+    , massiv-io   ^>=0.1
+
+  exposed-modules: Geography.MapAlgebra
+
+test-suite mapalgebra-test
+  import:         commons
+  type:           exitcode-stdio-1.0
+  main-is:        Test.hs
+  hs-source-dirs: test
+  ghc-options:    -threaded -with-rtsopts=-N
+  build-depends:
+    , containers
+    , HUnit-approx      ^>=1.1
+    , mapalgebra
+    , QuickCheck
+    , tasty             >=0.11 && <2.0
+    , tasty-hunit       >=0.9  && <0.11
+    , tasty-quickcheck  >=0.8  && <0.11
+
+benchmark mapalgebra-bench
+  import:         commons
+  type:           exitcode-stdio-1.0
+  main-is:        Bench.hs
+  hs-source-dirs: bench
+  ghc-options:    -threaded -O2 -with-rtsopts=-N
+  build-depends:
+    , criterion   >=1.1 && <1.6
+    , mapalgebra
+    , massiv-io   ^>=0.1

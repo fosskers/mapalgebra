@@ -1,6 +1,6 @@
-## 0.1.3
+## 0.2.0
 
-- `massiv-0.4` compatibility.
+- `massiv-0.4` minimum bound.
 - GHC 8.8 compatibility.
 
 ## 0.1.2

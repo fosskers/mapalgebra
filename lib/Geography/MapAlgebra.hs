@@ -386,11 +386,9 @@ newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
 -- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
 -- `Raster` for display. This should only be used for debugging.
--- instance (Show a, Load u Ix2 a) => Show (Raster u p r c a) where
---   show (Raster a) = show . computeAs B $ extract' zeroIndex (Sz2 r c) a
---     where Sz (r :. c) = liftIndex (P.min 10) $ size a
-instance Show (Raster u p r c a) where
-  show (Raster _) = ""
+instance (Show a, Load (R u) Ix2 a, Extract u Ix2 a) => Show (Raster u p r c a) where
+  show (Raster a) = show . computeAs B $ extract' zeroIndex (Sz2 (P.min 10 r) (P.min 10 c)) a
+    where Sz (r :. c) = size a
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
