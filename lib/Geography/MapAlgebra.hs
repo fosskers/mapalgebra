@@ -387,9 +387,11 @@ newtype Raster u p (r :: Nat) (c :: Nat) a = Raster { _array :: Array u Ix2 a }
 
 -- | Warning: This will evaluate (at most) the 10x10 top-left corner of your
 -- `Raster` for display. This should only be used for debugging.
-instance (Show a, Load (EltRepr u Ix2) Ix2 a, Size u Ix2 a) => Show (Raster u p r c a) where
-  show (Raster a) = show . computeAs B $ extract' zeroIndex (r :. c) a
-    where (r :. c) = liftIndex (P.min 10) $ size a
+-- instance (Show a, Load u Ix2 a) => Show (Raster u p r c a) where
+--   show (Raster a) = show . computeAs B $ extract' zeroIndex (Sz2 r c) a
+--     where Sz (r :. c) = liftIndex (P.min 10) $ size a
+instance Show (Raster u p r c a) where
+  show (Raster _) = ""
 
 instance (Eq a, Unbox a) => Eq (Raster U p r c a) where
   Raster a == Raster b = a == b
@@ -485,7 +487,7 @@ instance Foldable (Raster D p r c) where
   {-# INLINE product #-}
 
   -- | \(\mathcal{O}(1)\).
-  length (Raster a) = (\(r :. c) -> r * c) $ A.size a
+  length (Raster a) = (\(Sz2 r c) -> r * c) $ A.size a
   {-# INLINE length #-}
 
 -- | \(\mathcal{O}(1)\). Force a `Raster`'s representation to `D`, allowing it
@@ -515,7 +517,7 @@ constant u c a = fromFunction u c (const a)
 -- number respectively.
 fromFunction :: forall u p r c a. (KnownNat r, KnownNat c, Construct u Ix2 a) =>
   u -> Comp -> (Ix2 -> a) -> Raster u p r c a
-fromFunction u c f = Raster $ makeArrayR u c sh f
+fromFunction u c f = Raster $ makeArrayR u c (Sz sh) f
   where sh = fromInteger (natVal (Proxy :: Proxy r)) :. fromInteger (natVal (Proxy :: Proxy c))
 {-# INLINE fromFunction #-}
 
@@ -524,7 +526,8 @@ fromFunction u c f = Raster $ makeArrayR u c sh f
 -- the `Raster`.
 fromVector :: forall v p r c a. (KnownNat r, KnownNat c, GV.Vector v a, Mutable (A.ARepr v) Ix2 a, Typeable v) =>
   Comp -> v a -> Either String (Raster (A.ARepr v) p r c a)
-fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp (r :. c) v
+-- fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector comp (r :. c) v
+fromVector comp v | (r * c) == GV.length v = Right . Raster $ A.fromVector' comp (Sz2 r c) v
                   | otherwise = Left $ printf "Expected Pixel Count: %d - Actual: %d" (r * c) (GV.length v)
   where r = fromInteger $ natVal (Proxy :: Proxy r)
         c = fromInteger $ natVal (Proxy :: Proxy c)
@@ -548,7 +551,7 @@ fromRGBA fp = do
   img <- setComp (bool Par Seq $ cap == 1) <$> readImageAuto fp
   let rows = fromInteger $ natVal (Proxy :: Proxy r)
       cols = fromInteger $ natVal (Proxy :: Proxy c)
-      (r :. c) = size img
+      Sz (r :. c) = size img
   if r == rows && c == cols
     then do
     (ar, ag, ab, aa) <- spreadRGBA img
@@ -565,7 +568,7 @@ spreadRGBA arr = do
   mb <- A.unsafeNew sz
   mg <- A.unsafeNew sz
   ma <- A.unsafeNew sz
-  flip A.imapP_ arr $ \i (PixelRGBA r g b a) -> do
+  flip A.imapM_ arr $ \i (PixelRGBA r g b a) -> do
     A.unsafeWrite mr i r
     A.unsafeWrite mg i g
     A.unsafeWrite mb i b
@@ -585,10 +588,10 @@ fromGray fp = do
   img <- setComp (bool Par Seq $ cap == 1) <$> readImageAuto fp
   let rows = fromInteger $ natVal (Proxy :: Proxy r)
       cols = fromInteger $ natVal (Proxy :: Proxy c)
-      (r :. c) = size img
+      Sz (r :. c) = size img
   pure . bool (Left $ printf "Expected Size: %d x %d - Actual Size: %d x %d" rows cols r c) (Right $ f img) $ r == rows && c == cols
   where f :: Image S Y a -> Raster S p r c a
-        f img = Raster . A.fromVector (getComp img) (size img) . VS.unsafeCast $ A.toVector img
+        f img = Raster . A.fromVector' (getComp img) (size img) . VS.unsafeCast $ A.toVector img
 {-# INLINE fromGray #-}
 
 -- | An invisible pixel (alpha channel set to 0).
@@ -702,12 +705,12 @@ lmean (a :| as)    = (\n -> realToFrac n / len) <$> foldl' (+) a as
 
 -- | The count of unique values at each shared index.
 lvariety :: (KnownNat r, KnownNat c, Eq a) => NonEmpty (Raster D p r c a) -> Raster D p r c Word
-lvariety = fmap (fromIntegral . length . NE.nub) . sequenceA
+lvariety = fmap (fromIntegral . length . NE.nub) . P.sequenceA
 {-# INLINE lvariety #-}
 
 -- | The most frequently appearing value at each shared index.
 lmajority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
-lmajority = fmap majo . sequenceA
+lmajority = fmap majo . P.sequenceA
 {-# INLINE lmajority #-}
 
 -- | Find the most common value in some `Foldable`.
@@ -723,7 +726,7 @@ majo = fst . g . f
 
 -- | The least frequently appearing value at each shared index.
 lminority :: (KnownNat r, KnownNat c, Ord a) => NonEmpty (Raster D p r c a) -> Raster D p r c a
-lminority = fmap mino . sequenceA
+lminority = fmap mino . P.sequenceA
 {-# INLINE lminority #-}
 
 -- | Find the least common value in some `Foldable`.
@@ -743,7 +746,7 @@ lvariance
   :: forall p a r c. (Real a, KnownNat r, KnownNat c)
   => NonEmpty (Raster D p r c a) -> Maybe (Raster D p r c Double)
 lvariance (_ :| []) = Nothing
-lvariance rs = Just (f <$> sequenceA rs)
+lvariance rs = Just (f <$> P.sequenceA rs)
   where
     len :: Double
     len = realToFrac $ length rs
@@ -995,7 +998,7 @@ fpartition (Raster a) = Raster $ mapStencil Reflect partStencil a
 {-# INLINE fpartition #-}
 
 partStencil :: (Eq a, Default a) => Stencil Ix2 a Corners
-partStencil = makeStencil (2 :. 2) (1 :. 0) $ \f -> do
+partStencil = makeStencil (Sz2 2 2) (1 :. 0) $ \f -> do
   tl <- f (-1 :. 0)
   tr <- f (-1 :. 1)
   br <- f (0  :. 1)
@@ -1076,12 +1079,12 @@ neighbourhood g f = g <$> f (-1 :. -1) <*> f (-1 :. 0) <*> f (-1 :. 1)
 {-# INLINE neighbourhood #-}
 
 neighbourhoodStencil :: Default a => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
-neighbourhoodStencil f = makeStencil (3 :. 3) (1 :. 1) (neighbourhood f)
+neighbourhoodStencil f = makeStencil (Sz2 3 3) (1 :. 1) (neighbourhood f)
 {-# INLINE neighbourhoodStencil #-}
 
 -- | Get the surficial facets for each pixel and apply some function to them.
 facetStencil :: (Fractional a, Default a) => (a -> a -> a -> a -> a -> a -> a -> a -> a -> b) -> Stencil Ix2 a b
-facetStencil f = makeStencil (3 :. 3) (1 :. 1) (neighbourhood g)
+facetStencil f = makeStencil (Sz2 3 3) (1 :. 1) (neighbourhood g)
   where g nw no ne we fo ea sw so se = f ((nw + no + we + fo) / 4)
                                          ((no + fo) / 2)
                                          ((no + ne + fo + ea) / 4)
@@ -1311,7 +1314,7 @@ histogram (Raster a) = runST $ do
 -- | Given a `Histogram`, produce a list of "colour breaks" as needed by
 -- functions like `greenRed`.
 breaks :: Histogram -> [Word8]
-breaks (Histogram h) = take 10 . (1 :) . reverse . snd . VS.ifoldl' f (binWidth, []) . VS.postscanl' (+) 0 $ VS.tail h
+breaks (Histogram h) = take 10 . (1 :) . P.reverse . snd . VS.ifoldl' f (binWidth, []) . VS.postscanl' (+) 0 $ VS.tail h
   where binWidth     = VS.sum (VS.tail h) `div` 11  -- Yes, 11 and not 10.
         f a@(goal, acc) i n | n > goal  = (next n goal, (fromIntegral i + 1) : acc)
                             | otherwise = a

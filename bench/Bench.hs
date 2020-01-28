@@ -79,8 +79,8 @@ localOps (RGBARaster r g b _) (RGBARaster rF gF bF _) img = bgroup "Local Operat
   , bench "zipWith (/)"    $ nf (_array . strict S . zipWith (/) rF) gF
   , bench "(+)"            $ nf (_array . strict S . (+ lazy r)) (lazy g)
   , bench "(/)"            $ nf (_array . strict S . (/ lazy rF)) (lazy gF)
-  , bench "(.+)"           $ nf (\g' -> computeAs S $ _array r .+ g') (_array g)
-  , bench "(./)"           $ nf (\g' -> computeAs S $ _array rF ./ g') (_array gF)
+  -- , bench "(.+)"           $ nf (\g' -> computeAs S $ _array r .+ g') (_array g)
+  -- , bench "(./)"           $ nf (\g' -> computeAs S $ _array rF ./ g') (_array gF)
   , bench "lmax"           $ nf (_array . strict S . lmax img) img
   , bench "lmin"           $ nf (_array . strict S . lmin img) img
   , bench "lmean (Word8)"  $ nf (_array . strict S . lmean @Word8 @Double) rs
