@@ -6,7 +6,6 @@ module Main ( main ) where
 import           Criterion.Main
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Massiv.Array as A hiding (zipWith)
-import           Data.Monoid ((<>))
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
 import           Geography.MapAlgebra

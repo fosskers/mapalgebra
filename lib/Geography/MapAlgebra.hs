@@ -285,7 +285,6 @@ import           Control.Monad.ST
 import           Data.Bits (testBit)
 import           Data.Bool (bool)
 import qualified Data.ByteString.Lazy as BL
-import           Data.Default (Default, def)
 import           Data.Foldable
 import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
