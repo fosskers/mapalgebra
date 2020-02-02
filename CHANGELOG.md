@@ -1,3 +1,8 @@
+## 0.2.1
+
+- Use certain `massiv` functions more canonically. Should improve performance of
+  certain Focal Operations.
+
 ## 0.2.0
 
 - `massiv-0.4` minimum bound.
