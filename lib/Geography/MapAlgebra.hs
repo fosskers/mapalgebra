@@ -773,40 +773,37 @@ zipWith f (Raster a) (Raster b) = Raster $ A.zipWith f a b
 {-# INLINE zipWith #-}
 
 -- | Focal Addition.
-fsum :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fsum (Raster a) = Raster $ mapStencil (Fill 0) (neighbourhoodStencil f) a
-  where f nw no ne we fo ea sw so se = nw + no + ne + we + fo + ea + sw + so + se
+fsum :: (Num a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fsum (Raster a) = Raster $ mapStencil (Fill 0) (sumStencil $ Sz2 3 3) a
 {-# INLINE fsum #-}
 
 -- | Focal Product.
-fproduct :: (Num a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fproduct (Raster a) = Raster $ mapStencil (Fill 1) (neighbourhoodStencil f) a
-  where f nw no ne we fo ea sw so se = nw * no * ne * we * fo * ea * sw * so * se
+fproduct :: (Num a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fproduct (Raster a) = Raster $ mapStencil (Fill 1) (productStencil $ Sz2 3 3) a
+{-# INLINE fproduct #-}
 
 -- | Focal Monoid - combine all elements of a neighbourhood via their `Monoid`
 -- instance. In terms of precedence, the neighbourhood focus is the "left-most",
 -- and all other elements are "added" to it.
 --
 -- This is not mentioned in GaCM, but seems useful nonetheless.
-fmonoid :: (Monoid a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmonoid (Raster a) = Raster $ mapStencil (Fill mempty) (neighbourhoodStencil f) a
-  where f nw no ne we fo ea sw so se = fo `mappend` nw `mappend` no `mappend` ne `mappend` we `mappend` ea `mappend` sw `mappend` so `mappend` se
+fmonoid :: (Monoid a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmonoid (Raster a) = Raster $ mapStencil (Fill mempty) (foldStencil $ Sz2 3 3) a
+{-# INLINE fmonoid #-}
 
 -- | Focal Mean.
-fmean :: (Real a, Fractional b, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c b
-fmean = fmap (\n -> realToFrac n / 9) . fsum
+fmean :: (Fractional a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmean (Raster a) = Raster $ mapStencil (Fill 0) (avgStencil $ Sz2 3 3) a
 {-# INLINE fmean #-}
 
 -- | Focal Maximum.
-fmax :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmax (Raster a) = Raster $ mapStencil Edge (neighbourhoodStencil f) a
-  where f nw no ne we fo ea sw so se = P.max nw . P.max no . P.max ne . P.max we . P.max fo . P.max ea . P.max sw $ P.max so se
+fmax :: (Ord a, Bounded a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmax (Raster a) = Raster $ mapStencil Edge (maxStencil $ Sz2 3 3) a
 {-# INLINE fmax #-}
 
 -- | Focal Minimum.
-fmin :: (Ord a, Default a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
-fmin (Raster a) = Raster $ mapStencil Edge (neighbourhoodStencil f) a
-  where f nw no ne we fo ea sw so se = P.min nw . P.min no . P.min ne . P.min we . P.min fo . P.min ea . P.min sw $ P.min so se
+fmin :: (Ord a, Bounded a, Manifest u Ix2 a) => Raster u p r c a -> Raster DW p r c a
+fmin (Raster a) = Raster $ mapStencil Edge (minStencil $ Sz2 3 3) a
 {-# INLINE fmin #-}
 
 -- | Focal Variety - the number of unique values in each neighbourhood.
